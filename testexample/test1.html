@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JVM GC 幻灯片演示课件</title>
+<style>
+/* 全局变量 亮色主题 */
+:root {
+    --grad-main: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+    --bg-page: #ffffff;
+    --bg-card: #f8fafc;
+    --text-title: #1e293b;
+    --text-body: #475569;
+    --border-light: #e2e8f0;
+    --code-bg: #0f172a;
+    --code-text: #e2e8f0;
+    --shadow-card: 0 10px 30px rgba(37, 99, 235, 0.12);
+    --shadow-slide: 0 20px 60px rgba(0,0,0,0.08);
+    --anim-speed: 0.5s;
+}
+/* 暗色投影主题 */
+[data-theme="dark"] {
+    --grad-main: linear-gradient(135deg, #1d4ed8 0%, #6d28d9 100%);
+    --bg-page: #0f172a;
+    --bg-card: #1e293b;
+    --text-title: #f1f5f9;
+    --text-body: #94a3b8;
+    --border-light: #334155;
+    --shadow-card: 0 10px 30px rgba(0,0,0,0.3);
+    --shadow-slide: 0 20px 60px rgba(0,0,0,0.4);
+}
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+body {
+    font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    background: var(--bg-page);
+    transition: background var(--anim-speed);
+}
+/* 幻灯片容器 */
+.slide-wrap {
+    width: 100vw;
+    height: 100vh;
+    position: relative;
+}
+/* 单页幻灯片 */
+.slide-item {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    padding: 60px 80px;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(40px) scale(0.98);
+    transition: all var(--anim-speed) cubic-bezier(0.4, 0, 0.2, 1);
+}
+/* 当前激活幻灯片 */
+.slide-item.active {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+}
+/* 顶部标题栏 */
+.slide-header {
+    background: var(--grad-main);
+    border-radius: 16px;
+    padding: 24px 36px;
+    box-shadow: var(--shadow-card);
+    margin-bottom: 40px;
+}
+.slide-header h1 {
+    font-size: 36px;
+    color: #fff;
+    letter-spacing: 1px;
+}
+.slide-header h2 {
+    font-size: 22px;
+    color: rgba(255,255,255,0.9);
+    margin-top: 8px;
+    font-weight: normal;
+}
+/* 内容卡片 */
+.content-card {
+    background: var(--bg-card);
+    border-radius: 16px;
+    padding: 32px 40px;
+    box-shadow: var(--shadow-card);
+    border: 1px solid var(--border-light);
+}
+.content-card h3 {
+    font-size: 26px;
+    color: var(--text-title);
+    margin-bottom: 24px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--border-light);
+}
+/* 文本、列表 */
+p {
+    font-size: 18px;
+    line-height: 1.8;
+    color: var(--text-body);
+    margin: 12px 0;
+}
+ul, ol {
+    margin: 20px 0 20px 28px;
+}
+li {
+    font-size: 18px;
+    line-height: 1.9;
+    color: var(--text-body);
+    margin: 10px 0;
+}
+li strong {
+    color: var(--primary-light);
+}
+/* 代码块 */
+pre {
+    background: var(--code-bg);
+    color: var(--code-text);
+    padding: 20px 24px;
+    border-radius: 12px;
+    font-family: Consolas, monospace;
+    font-size: 16px;
+    overflow-x: auto;
+    margin: 24px 0;
+}
+code {
+    background: var(--border-light);
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-family: Consolas;
+}
+/* 引用高亮块 */
+.tip-block {
+    border-left: 6px solid #7c3aed;
+    background: rgba(124, 58, 237, 0.08);
+    padding: 18px 24px;
+    border-radius: 0 12px 12px 0;
+    margin: 24px 0;
+    font-size: 19px;
+}
+/* 表格样式 PPT风 */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 24px 0;
+    border-radius: 12px;
+    overflow: hidden;
+}
+th {
+    background: var(--grad-main);
+    color: #fff;
+    padding: 16px;
+    font-size: 18px;
+}
+td {
+    border: 1px solid var(--border-light);
+    padding: 16px;
+    font-size: 17px;
+    color: var(--text-body);
+    text-align: center;
+}
+/* 底部控制栏 */
+.slide-footer {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    z-index: 99;
+}
+.page-num {
+    font-size: 16px;
+    color: var(--text-body);
+    padding: 8px 20px;
+    background: var(--bg-card);
+    border-radius: 99px;
+    box-shadow: var(--shadow-card);
+}
+.ctrl-btn {
+    padding: 10px 22px;
+    border: none;
+    border-radius: 99px;
+    background: var(--grad-main);
+    color: #fff;
+    font-size: 16px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+.ctrl-btn:hover {
+    opacity: 0.85;
+}
+/* 流程图文本框 */
+.flow-box {
+    background: rgba(37, 99, 235, 0.08);
+    padding: 24px;
+    border-radius: 12px;
+    margin: 20px 0;
+}
+/* 适配大屏投影 */
+@media screen and (min-width:1600px) {
+    .slide-header h1 {font-size: 42px;}
+    .content-card h3 {font-size: 30px;}
+    p, li {font-size: 20px;}
+}
+/* 小屏幕自动缩放 */
+@media screen and (max-width:1000px) {
+    .slide-item {padding: 30px 20px;}
+    .slide-header h1 {font-size: 28px;}
+}
+</style>
+</head>
+<body>
+<div class="slide-wrap">
+    <!-- 第1页 封面 -->
+    <div class="slide-item active" data-index="1">
+        <div style="height: 100%;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;">
+            <div class="slide-header" style="width: 80%;text-align:center;">
+                <h1>JVM 垃圾回收 GC 全套课件</h1>
+                <h2>面试 / 课堂 PPT 演示专用</h2>
+            </div>
+            <div class="content-card" style="width:70%;margin-top:40px;">
+                <p style="text-align:center;font-size:20px;">HotSpot 虚拟机 · 分代收集 · 主流收集器 · GC调优</p>
+                <div class="tip-block" style="text-align:center;margin-top:30px;">
+                    操作提示：上下箭头 / 空格 翻页 | T切换主题 | F全屏
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 第2页 GC四大核心 -->
+    <div class="slide-item" data-index="2">
+        <div class="slide-header">
+            <h1>1. GC 四大核心基础问题</h1>
+        </div>
+        <div class="content-card">
+            <h3>学习GC先理清四层逻辑</h3>
+            <ol>
+                <li><strong>垃圾存在哪里？</strong>Java堆为主，元空间存放类元数据</li>
+                <li><strong>什么是垃圾？</strong>GC Roots不可访问的对象</li>
+                <li><strong>用什么回收？</strong>标记清除 / 标记复制 / 标记整理算法</li>
+                <li><strong>谁执行回收？</strong>Serial / Parallel / G1 / ZGC收集器</li>
+            </ol>
+            <div class="tip-block">
+                核心区分：<strong>算法是理论，收集器是落地实现</strong>
+            </div>
+        </div>
+    </div>
+
+    <!-- 第3页 堆分代结构 -->
+    <div class="slide-item" data-index="3">
+        <div class="slide-header">
+            <h1>2. Java 堆分代内存结构</h1>
+        </div>
+        <div class="content-card">
+<pre>Java Heap
+├─ 年轻代 Young
+│  ├ Eden：所有新对象默认分配
+│  ├ Survivor From
+│  └ Survivor To
+└─ 老年代 Old：长期存活对象
+</pre>
+            <ul>
+                <li>同一时间仅一个Survivor可用，GC后互换角色</li>
+                <li>JDK8 永久代废除，替换为元空间Metaspace（本地内存）</li>
+                <li>G1收集器：堆切割为均等Region，逻辑分代、物理不连续</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- 第4页 对象生命周期 -->
+    <div class="slide-item" data-index="4">
+        <div class="slide-header">
+            <h1>3. Java 对象完整生命周期</h1>
+        </div>
+        <div class="content-card">
+            <div class="flow-box">
+<pre>new对象 → TLAB无锁分配至Eden
+Eden空间不足 → 触发Young GC
+存活对象移入Survivor，年龄+1
+达到晋升阈值 / Survivor空间不足 → 晋升老年代
+老年代GC标记不可达 → 释放内存
+</pre>
+            </div>
+            <ul>
+                <li>超大数组：G1直接分配Humongous大对象区</li>
+                <li>逃逸分析：局部小对象可栈上分配，不占用堆内存</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- 第5页 GC类型对比 -->
+    <div class="slide-item" data-index="5">
+        <div class="slide-header">
+            <h1>4. 四类GC回收范围区分</h1>
+        </div>
+        <div class="content-card">
+            <table>
+                <tr>
+                    <th>GC类型</th>
+                    <th>回收范围</th>
+                    <th>核心特征</th>
+                </tr>
+                <tr>
+                    <td>Young GC</td>
+                    <td>全部年轻代</td>
+                    <td>频率高、停顿短</td>
+                </tr>
+                <tr>
+                    <td>Mixed GC</td>
+                    <td>G1专属</td>
+                    <td>年轻代+高垃圾老年代Region</td>
+                </tr>
+                <tr>
+                    <td>Major GC</td>
+                    <td>仅老年代</td>
+                    <td>语义模糊，工程不推荐使用</td>
+                </tr>
+                <tr>
+                    <td>Full GC</td>
+                    <td>整个堆+元空间</td>
+                    <td>停顿极长，线上必须规避</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- 第6页 判断垃圾对象 -->
+    <div class="slide-item" data-index="6">
+        <div class="slide-header">
+            <h1>5. JVM 如何判定垃圾对象</h1>
+        </div>
+        <div class="content-card">
+            <h3>方案1：引用计数（已废弃）</h3>
+            <p>对象自带计数器，循环引用场景无法回收，HotSpot不采用</p>
+            <h3>方案2：可达性分析（主流实现）</h3>
+            <p>从GC Roots遍历引用链，无法到达的对象判定为垃圾</p>
+            <h3>GC Roots 来源</h3>
+            <ul>
+                <li>虚拟机栈局部变量、static静态常量</li>
+                <li>JNI本地引用、synchronized锁持有对象</li>
+                <li>系统核心线程、类加载器内部引用</li>
+            </ul>
+            <div class="tip-block">
+                <strong>禁止使用finalize()</strong>：执行不可控、存在对象复活风险
+            </div>
+        </div>
+    </div>
+
+    <!-- 第7页 四种引用 -->
+    <div class="slide-item" data-index="7">
+        <div class="slide-header">
+            <h1>6. 四级引用强度划分</h1>
+        </div>
+        <div class="content-card">
+            <table>
+                <tr>
+                    <th>引用类型</th>
+                    <th>回收规则</th>
+                    <th>业务场景</th>
+                </tr>
+                <tr>
+                    <td>强引用</td>
+                    <td>只要可达绝不回收</td>
+                    <td>日常业务对象</td>
+                </tr>
+                <tr>
+                    <td>软引用 SoftReference</td>
+                    <td>内存耗尽OOM前清理</td>
+                    <td>内存缓存</td>
+                </tr>
+                <tr>
+                    <td>弱引用 WeakReference</td>
+                    <td>下一次GC直接清除</td>
+                    <td>WeakHashMap</td>
+                </tr>
+                <tr>
+                    <td>虚引用 PhantomReference</td>
+                    <td>仅提供回收通知</td>
+                    <td>堆外内存释放</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- 第8页 三大回收算法 -->
+    <div class="slide-item" data-index="8">
+        <div class="slide-header">
+            <h1>7. 三大垃圾回收算法</h1>
+        </div>
+        <div class="content-card">
+            <ul>
+                <li><strong>标记-清除</strong>：不移动对象，产生大量内存碎片（CMS使用）</li>
+                <li><strong>标记-复制</strong>：复制存活对象，无碎片，适配年轻代（对象朝生夕死）</li>
+                <li><strong>标记-整理</strong>：压缩内存消除碎片，适合老年代Parallel Old</li>
+            </ul>
+            <div class="tip-block">
+                分代收集不是新算法，是根据对象生命周期组合优化的策略
+            </div>
+        </div>
+    </div>
+
+    <!-- 第9页 STW/并行/并发 -->
+    <div class="slide-item" data-index="9">
+        <div class="slide-header">
+            <h1>8. STW / 并行 / 并发 概念区分</h1>
+        </div>
+        <div class="content-card">
+            <ul>
+                <li><strong>STW 暂停</strong>：GC关键阶段必须暂停所有业务线程，所有收集器都存在短时停顿</li>
+                <li><strong>并行 Parallel</strong>：多GC线程同时工作，业务全程暂停（Parallel GC）</li>
+                <li><strong>并发 Concurrent</strong>：GC线程与业务同时运行（G1/ZGC），会产生浮动垃圾</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- 第10页 收集器选型 -->
+    <div class="slide-item" data-index="10">
+        <div class="slide-header">
+            <h1>9. 主流收集器选型方案</h1>
+        </div>
+        <div class="content-card">
+            <table>
+                <tr>
+                    <th>收集器</th>
+                    <th>设计目标</th>
+                    <th>适用业务</th>
+                </tr>
+                <tr>
+                    <td>Parallel GC</td>
+                    <td>最大化吞吐量</td>
+                    <td>批处理、大数据离线任务</td>
+                </tr>
+                <tr>
+                    <td>G1 GC</td>
+                    <td>吞吐与延迟平衡</td>
+                    <td>绝大多数线上Web/RPC服务</td>
+                </tr>
+                <tr>
+                    <td>ZGC</td>
+                    <td>亚毫秒极低停顿</td>
+                    <td>大堆、延迟敏感核心业务</td>
+                </tr>
+            </table>
+<pre># G1推荐启动参数
+-Xms4g -Xmx4g -XX:+UseG1GC -XX:MaxGCPauseMillis=200
+# ZGC启用参数
+-XX:+UseZGC
+</pre>
+        </div>
+    </div>
+
+    <!-- 第11页 GC排查命令 -->
+    <div class="slide-item" data-index="11">
+        <div class="slide-header">
+            <h1>10. 线上GC故障排查工具</h1>
+        </div>
+        <div class="content-card">
+<pre># 实时监控GC指标，每秒刷新
+jstat -gcutil 进程PID 1000
+
+# 导出堆快照，分析内存泄漏
+jcmd PID GC.heap_dump /tmp/heap.hprof
+
+# 查看当前JVM全部GC参数
+jcmd PID VM.flags
+</pre>
+            <div class="tip-block">
+                内存泄漏判断标准：多次Full GC后，堆使用基线持续上涨
+            </div>
+        </div>
+    </div>
+
+    <!-- 第12页 面试高频误区 -->
+    <div class="slide-item" data-index="12">
+        <div class="slide-header">
+            <h1>11. 面试高频易错点总结</h1>
+        </div>
+        <div class="content-card">
+            <ul>
+                <li><code>obj=null</code> 不会立刻回收对象，仅断开一条引用链</li>
+                <li>对象不一定等到15岁才晋升，Survivor不足会提前晋升</li>
+                <li>G1/ZGC 并非无STW，只是停顿极短</li>
+                <li>Java存在GC，但依然会发生内存泄漏</li>
+                <li><code>System.gc()</code> 仅为建议，不会强制Full GC</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- 底部控制栏 -->
+    <div class="slide-footer">
+        <button class="ctrl-btn" id="prevBtn">上一页</button>
+        <div class="page-num"><span id="currentPage">1</span> / <span id="totalPage">12</span></div>
+        <button class="ctrl-btn" id="nextBtn">下一页</button>
+        <button class="ctrl-btn" id="themeSwitch">切换主题</button>
+        <button class="ctrl-btn" id="fullBtn">全屏</button>
+    </div>
+</div>
+
+<script>
+// 获取所有幻灯片
+const slides = document.querySelectorAll('.slide-item');
+const total = slides.length;
+let currentIdx = 0;
+const pageNum = document.getElementById('currentPage');
+const totalNum = document.getElementById('totalPage');
+totalNum.innerText = total;
+
+// 切换页面函数
+function changePage(newIndex) {
+    if(newIndex < 0 || newIndex >= total) return;
+    slides[currentIdx].classList.remove('active');
+    currentIdx = newIndex;
+    slides[currentIdx].classList.add('active');
+    pageNum.innerText = currentIdx + 1;
+}
+
+// 按钮事件
+document.getElementById('prevBtn').onclick = ()=> changePage(currentIdx - 1);
+document.getElementById('nextBtn').onclick = ()=> changePage(currentIdx + 1);
+
+// 键盘快捷键
+document.onkeydown = (e)=>{
+    switch(e.key){
+        case 'ArrowUp':
+        case 'PageUp':
+            changePage(currentIdx - 1);
+            break;
+        case 'ArrowDown':
+        case 'PageDown':
+        case ' ':
+            changePage(currentIdx + 1);
+            break;
+        case 't':
+        case 'T':
+            switchTheme();
+            break;
+        case 'f':
+        case 'F':
+            fullScreen();
+            break;
+    }
+}
+
+// 主题切换
+const html = document.documentElement;
+function switchTheme(){
+    if(html.getAttribute('data-theme') === 'dark'){
+        html.removeAttribute('data-theme');
+        localStorage.setItem('pptTheme','light');
+    }else{
+        html.setAttribute('data-theme','dark');
+        localStorage.setItem('pptTheme','dark');
+    }
+}
+document.getElementById('themeSwitch').onclick = switchTheme;
+// 读取本地存储主题
+if(localStorage.getItem('pptTheme') === 'dark'){
+    html.setAttribute('data-theme','dark');
+}
+
+// 全屏功能
+function fullScreen(){
+    if(document.fullscreenElement){
+        document.exitFullscreen();
+    }else{
+        document.documentElement.requestFullscreen();
+    }
+}
+document.getElementById('fullBtn').onclick = fullScreen;
+</script>
+</body>
+</html>

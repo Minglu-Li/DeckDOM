@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Apple风格演示页</title>
+<style>
+*{
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+html{
+    scroll-behavior: smooth;
+}
+body{
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro SC", "PingFang SC", "Helvetica Neue", sans-serif;
+    background: #fff;
+    color: #1d1d1f;
+    overflow-x: hidden;
+}
+/* 导航栏磨砂毛玻璃 */
+.nav-bar{
+    width: 100%;
+    height: 44px;
+    background: rgba(0,0,0,0.8);
+    backdrop-filter: saturate(180%) blur(20px);
+    position: fixed;
+    top: 0;
+    z-index: 999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 42px;
+}
+.nav-bar a{
+    color: #f5f5f7;
+    text-decoration: none;
+    font-size: 13px;
+    opacity: 0.8;
+    transition: opacity 0.2s ease;
+}
+.nav-bar a:hover{
+    opacity: 1;
+}
+/* 头部横幅 */
+.banner{
+    width: 100%;
+    height: 92vh;
+    margin-top: 44px;
+    background: linear-gradient(180deg, #fbfbfd 0%, #fff 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 0 20px;
+}
+.banner h1{
+    font-size: 56px;
+    font-weight: 600;
+    letter-spacing: -1px;
+    margin-bottom: 8px;
+}
+.banner p{
+    font-size: 28px;
+    color: #6e6e73;
+    margin-bottom: 24px;
+}
+.btn-group{
+    display: flex;
+    gap: 24px;
+}
+.btn{
+    font-size: 18px;
+    padding: 10px 22px;
+    border-radius: 980px;
+    text-decoration: none;
+    transition: all 0.25s ease;
+}
+.btn-blue{
+    background: #0071e3;
+    color: #fff;
+}
+.btn-blue:hover{
+    background: #0077ed;
+}
+.btn-link{
+    color: #0071e3;
+}
+.btn-link:hover{
+    text-decoration: underline;
+}
+.banner-img{
+    width: 620px;
+    margin-top: 40px;
+    border-radius:12px;
+}
+/* 产品区块 */
+.product-section{
+    width: 100%;
+    height: 88vh;
+    padding: 60px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    border-bottom: 1px solid #eaeaea;
+}
+.product-section.bg-gray{
+    background: #fbfbfd;
+}
+.product-section h2{
+    font-size: 44px;
+    font-weight: 600;
+    margin-bottom: 6px;
+}
+.product-section .desc{
+    font-size: 24px;
+    color: #6e6e73;
+    margin-bottom: 20px;
+}
+.product-img{
+    width: 580px;
+    margin-top: 30px;
+    transition: transform 0.4s ease;
+    border-radius:12px;
+}
+.product-img:hover{
+    transform: scale(1.03);
+}
+/* 双栏布局 */
+.two-col-wrap{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    padding: 0 12px;
+}
+.col-card{
+    height: 76vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 40px 20px;
+    background: #fbfbfd;
+}
+.col-card h3{
+    font-size: 36px;
+    margin-bottom: 6px;
+}
+.col-card .sub-desc{
+    font-size: 20px;
+    color: #6e6e73;
+    margin-bottom: 18px;
+}
+.col-img{
+    width: 420px;
+    margin-top: 24px;
+    border-radius:12px;
+}
+/* 滚动淡入动画 */
+.fade-item{
+    opacity: 0;
+    transform: translateY(40px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+}
+.fade-item.show{
+    opacity: 1;
+    transform: translateY(0);
+}
+.note{
+    font-size: 12px;
+    color: #86868b;
+    max-width: 980px;
+    margin: 40px auto;
+    padding: 0 20px;
+    line-height: 1.5;
+}
+/* 移动端适配 */
+@media screen and (max-width: 1024px){
+    .two-col-wrap{
+        grid-template-columns: 1fr;
+    }
+    .banner h1{
+        font-size: 38px;
+    }
+    .banner p{
+        font-size: 20px;
+    }
+    .banner-img{
+        width: 90%;
+    }
+    .product-img{
+        width: 90%;
+    }
+    .col-img{
+        width: 85%;
+    }
+}
+@media screen and (max-width: 768px){
+    .nav-bar{
+        gap: 16px;
+    }
+    .nav-bar a{
+        font-size: 11px;
+    }
+    .btn-group{
+        flex-direction: column;
+        gap: 12px;
+    }
+}
+</style>
+</head>
+<body>
+<nav class="nav-bar">
+    <a href="#iphone">iPhone</a>
+    <a href="#mac">Mac</a>
+    <a href="#ipad">iPad</a>
+    <a href="#watch">Apple Watch</a>
+    <a href="#airpods">AirPods</a>
+    <a href="#tradein">换购</a>
+</nav>
+
+<section class="banner fade-item" id="iphone">
+    <h1>iPhone</h1>
+    <p>来看看 iPhone 最新阵容</p>
+    <div class="btn-group">
+        <a href="#" class="btn btn-link">进一步了解</a>
+        <a href="#" class="btn btn-blue">选购 iPhone</a>
+    </div>
+    <!-- 无防盗链图片地址 -->
+    <img class="banner-img" src="https://picsum.photos/id/1/1200/600" alt="iPhone 全系">
+</section>
+
+<section class="product-section bg-gray fade-item" id="mac">
+    <h2>MacBook Air</h2>
+    <p class="desc">强势动力现来自 M5</p>
+    <div class="btn-group">
+        <a href="#" class="btn btn-link">进一步了解</a>
+        <a href="#" class="btn btn-blue">购买</a>
+    </div>
+    <img class="product-img" src="https://picsum.photos/id/2/1120/640" alt="MacBook Air M5">
+</section>
+
+<section class="product-section fade-item">
+    <h2>MacBook Pro</h2>
+    <p class="desc">M5、M5 Pro 和 M5 Max 现已集结</p>
+    <div class="btn-group">
+        <a href="#" class="btn btn-link">进一步了解</a>
+        <a href="#" class="btn btn-blue">购买</a>
+    </div>
+    <img class="product-img" src="https://picsum.photos/id/3/1120/640" alt="MacBook Pro">
+</section>
+
+<div class="two-col-wrap fade-item">
+    <div class="col-card" id="ipad">
+        <h3>iPad Air</h3>
+        <p class="sub-desc">强势动力现来自 M4</p>
+        <div class="btn-group">
+            <a href="#" class="btn btn-link">进一步了解</a>
+            <a href="#" class="btn btn-blue">购买</a>
+        </div>
+        <img class="col-img" src="https://picsum.photos/id/4/960/640" alt="iPad Air">
+    </div>
+    <div class="col-card" id="watch">
+        <h3>Apple Watch Series 11</h3>
+        <p class="sub-desc">满手高招，时刻照看好你的健康</p>
+        <div class="btn-group">
+            <a href="#" class="btn btn-link">进一步了解</a>
+            <a href="#" class="btn btn-blue">购买</a>
+        </div>
+        <img class="col-img" src="https://picsum.photos/id/5/960/640" alt="Apple Watch 11">
+    </div>
+</div>
+
+<div class="two-col-wrap fade-item" style="margin-top:12px">
+    <div class="col-card">
+        <h3>iPad Pro</h3>
+        <p class="sub-desc">先进的 AI，突破性的强大实力</p>
+        <div class="btn-group">
+            <a href="#" class="btn btn-link">进一步了解</a>
+            <a href="#" class="btn btn-blue">购买</a>
+        </div>
+        <img class="col-img" src="https://picsum.photos/id/6/960/640" alt="iPad Pro">
+    </div>
+    <div class="col-card" id="airpods">
+        <h3>AirPods Pro 3</h3>
+        <p class="sub-desc">入耳式主动降噪，入主新声代</p>
+        <div class="btn-group">
+            <a href="#" class="btn btn-link">进一步了解</a>
+            <a href="#" class="btn btn-blue">购买</a>
+        </div>
+        <img class="col-img" src="https://picsum.photos/id/7/960/640" alt="AirPods Pro 3">
+    </div>
+</div>
+
+<section class="product-section bg-gray fade-item">
+    <h2>高校生活，安排妥。</h2>
+    <p class="desc">以教育优惠入手 Mac 或 iPad，搭配 AirTag 四件装省更多</p>
+    <div class="btn-group">
+        <a href="#" class="btn btn-blue">选购</a>
+    </div>
+    <img class="product-img" src="https://picsum.photos/id/8/1120/640" alt="教育优惠套装">
+</section>
+
+<section class="product-section fade-item" id="tradein">
+    <h2>Apple Trade In 换购计划</h2>
+    <p class="desc">用 iPhone 13 或后续机型换购，折抵 950–5250 元</p>
+    <div class="btn-group">
+        <a href="#" class="btn btn-blue">获取折抵估价</a>
+    </div>
+    <img class="product-img" src="https://picsum.photos/id/9/1120/640" alt="换购计划">
+</section>
+
+<div class="note">
+    1. 折抵金额取决于你旧设备的状况、年份和配置。折抵优惠仅在选购全新 Apple 硬件产品时生效。估价可能发生变动。更多折抵详情见官网页面。
+</div>
+
+<script>
+const fadeItems = document.querySelectorAll('.fade-item');
+function checkFade(){
+    const trigger = window.innerHeight * 0.82;
+    fadeItems.forEach(item=>{
+        const rect = item.getBoundingClientRect();
+        if(rect.top < trigger){
+            item.classList.add('show');
+        }
+    })
+}
+window.addEventListener('scroll', checkFade);
+window.addEventListener('load', checkFade);
+</script>
+</body>
+</html>
