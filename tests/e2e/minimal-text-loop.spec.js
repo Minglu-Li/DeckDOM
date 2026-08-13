@@ -78,6 +78,6 @@ test("user can edit one text object, recover it, preview it, and export a standa
   await expect(deliverable.getByText("对象属性", { exact: true })).toHaveCount(0);
 
   const untouchedOriginal = await context.newPage();
-  await untouchedOriginal.goto("http://127.0.0.1:4391/testexample/test2.html");
+  await untouchedOriginal.goto("/testexample/test2.html");
   await expect(untouchedOriginal.getByRole("heading", { name: "iPhone", exact: true })).toBeVisible();
 });
