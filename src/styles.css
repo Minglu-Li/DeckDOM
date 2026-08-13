@@ -333,7 +333,7 @@ svg { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: 
 .local-processing-note svg { width: 14px; height: 14px; flex: 0 0 14px; margin-top: 1px; color: var(--green); }
 .local-processing-note strong { display: block; color: #465166; font-weight: 600; }
 
-.properties-panel { overflow: hidden; }
+.properties-panel { overflow-x: hidden; overflow-y: auto; }
 .selection-badge { height: 29px; padding: 0 15px; color: #929cad; font: 500 8px/29px "Cascadia Mono", Consolas, monospace; background: #fafbfd; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); text-transform: uppercase; }
 .properties-empty { padding: 50px 29px 31px; }
 .selection-glyph { display: grid; width: 42px; height: 42px; place-items: center; margin: 0 auto 15px; color: var(--blue); font-size: 19px; background: var(--blue-soft); border-radius: 50%; }
@@ -359,6 +359,15 @@ svg { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: 
 .apply-text-style-button { width: 100%; color: var(--blue); border-color: #b9c6f5; background: var(--blue-soft); }
 .object-properties { padding: 18px 15px; }
 .object-message { margin: 0 0 15px; color: #7b8698; font-size: 10px; line-height: 1.65; }
+.appearance-properties { padding: 0 15px 18px; }
+.appearance-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; padding: 14px 0 0; margin: 0 0 11px; border: 0; border-top: 1px solid var(--line); }
+.appearance-fields legend { padding: 12px 0 0; color: #3a4558; font-size: 10px; font-weight: 650; }
+.appearance-fields label { position: relative; display: grid; gap: 5px; color: #3a4558; font-size: 9px; font-weight: 650; }
+.appearance-fields input, .appearance-fields select { width: 100%; height: 30px; min-width: 0; padding: 0 7px; color: #293449; background: #fbfcfe; border: 1px solid var(--line-strong); border-radius: 4px; font-size: 9px; }
+.appearance-fields input[type="color"] { padding: 3px; }
+.appearance-fields label > span { position: absolute; right: 7px; bottom: 8px; color: #9aa3b3; font-size: 8px; pointer-events: none; }
+.appearance-properties p { margin: 8px 0 13px; color: #8b95a6; font-size: 9px; line-height: 1.55; }
+.apply-appearance-button { width: 100%; color: var(--blue); border-color: #b9c6f5; background: var(--blue-soft); }
 .image-properties > p { margin: 8px 0 13px; color: #8b95a6; font-size: 9px; line-height: 1.55; }
 .image-details { display: grid; gap: 7px; margin: 0; }
 .image-details div { padding: 8px 9px; background: #f8fafc; border: 1px solid var(--line); border-radius: 4px; }
