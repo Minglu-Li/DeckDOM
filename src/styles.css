@@ -339,6 +339,7 @@ svg { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: 
 .empty-kicker { margin: 0 0 7px; color: var(--blue); font: 600 8px/1 "Cascadia Mono", Consolas, monospace; letter-spacing: 0.16em; text-transform: uppercase; }
 .upload-empty-state h1 { margin: 0; color: #121a27; font: 650 24px/1.25 "Bahnschrift", "Microsoft YaHei UI", sans-serif; letter-spacing: 0.01em; }
 .empty-description { max-width: 350px; margin: 12px 0 18px; color: #677286; font-size: 11px; line-height: 1.7; }
+.support-boundary { max-width: 390px; margin: -8px 0 16px; color: #8a6a24; font-size: 9px; line-height: 1.55; }
 .empty-upload-button { min-width: 126px; height: 37px; color: #fff; background: var(--blue); border-color: var(--blue); box-shadow: 0 8px 20px rgba(47, 91, 255, 0.22); }
 .empty-upload-button:hover { background: var(--blue-dark); border-color: var(--blue-dark); }
 .local-processing-note { display: flex; align-items: flex-start; gap: 8px; margin-top: 25px; padding-top: 15px; color: #798397; border-top: 1px solid var(--line); font-size: 9px; line-height: 1.55; text-align: left; }
