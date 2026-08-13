@@ -145,8 +145,21 @@ app.innerHTML = `
         <div class="object-summary"><strong>文字对象</strong><span>可编辑</span></div>
         <label for="text-content">文字内容</label>
         <textarea id="text-content" rows="5"></textarea>
-        <p>文字会立即呈现在真实工作副本中，应用后进入编辑历史。</p>
+        <p class="inline-edit-status" hidden>正在工作副本中就地编辑</p>
+        <p>双击工作副本中的文字可就地编辑；应用文字用于替换全部内容。</p>
         <button class="button apply-text-button" type="button">应用文字</button>
+        <fieldset class="text-style-fields">
+          <legend>文字样式</legend>
+          <label>字体族<input name="fontFamily" type="text"></label>
+          <label>字号<input name="fontSize" type="number" min="1" step="1"><span>px</span></label>
+          <label>字重<select name="fontWeight"><option value="400">常规</option><option value="500">中等</option><option value="600">半粗</option><option value="700">粗体</option><option value="800">特粗</option></select></label>
+          <label>字形<select name="fontStyle"><option value="normal">常规</option><option value="italic">斜体</option></select></label>
+          <label>行高<input name="lineHeight" type="number" min="1" step="1"><span>px</span></label>
+          <label>字间距<input name="letterSpacing" type="number" step="0.1"><span>px</span></label>
+          <label>对齐<select name="textAlign"><option value="start">开始</option><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option><option value="justify">两端对齐</option></select></label>
+          <label>文字颜色<input name="color" type="color"></label>
+        </fieldset>
+        <button class="button apply-text-style-button" type="button">保存字体属性</button>
       </section>
       <section class="object-properties" aria-label="当前对象" hidden>
         <div class="object-summary"><strong></strong><span></span></div>
@@ -184,6 +197,18 @@ app.innerHTML = `
         </div>
       </form>
     </dialog>
+
+    <dialog class="replace-text-dialog" aria-labelledby="replace-text-dialog-title">
+      <form method="dialog">
+        <p class="empty-kicker">Replace all text</p>
+        <h2 id="replace-text-dialog-title">替换全部文字会清除内部格式</h2>
+        <p>当前文字包含 strong、span、code 等内联结构。继续后只保留输入的纯文字。</p>
+        <div class="trust-dialog-actions">
+          <button class="button" value="cancel">取消</button>
+          <button class="button replace-text-confirm" type="button">仍然替换</button>
+        </div>
+      </form>
+    </dialog>
   </div>
 `;
 
@@ -203,8 +228,11 @@ const state = {
   selectedId: null,
   selectedElement: null,
   pendingText: "",
+  pendingTextStyles: {},
   mode: "edit",
   restored: false,
+  inlineEditingElement: null,
+  inlineEditingBeforeHtml: "",
   objects: [],
   nextObjectId: 1,
   observer: null,
@@ -219,6 +247,8 @@ const refs = {
   fileInput: document.querySelector("#html-file-input"),
   trustDialog: document.querySelector(".trust-dialog"),
   trustConfirm: document.querySelector(".trust-confirm"),
+  replaceTextDialog: document.querySelector(".replace-text-dialog"),
+  replaceTextConfirm: document.querySelector(".replace-text-confirm"),
   emptyState: document.querySelector(".upload-empty-state"),
   canvasStage: document.querySelector(".canvas-stage"),
   documentName: document.querySelector(".document-state strong"),
@@ -231,8 +261,11 @@ const refs = {
   propertiesEmpty: document.querySelector(".properties-empty"),
   textProperties: document.querySelector(".text-properties"),
   textContent: document.querySelector("#text-content"),
+  inlineEditStatus: document.querySelector(".inline-edit-status"),
   textSummary: document.querySelector(".text-properties .object-summary"),
   applyText: document.querySelector(".apply-text-button"),
+  textStyleFields: document.querySelector(".text-style-fields"),
+  applyTextStyle: document.querySelector(".apply-text-style-button"),
   objectProperties: document.querySelector(".object-properties"),
   objectSummary: document.querySelector(".object-properties .object-summary"),
   objectMessage: document.querySelector(".object-message"),
@@ -282,6 +315,16 @@ refs.fileInput.addEventListener("change", importSelectedFile);
 refs.treeSearch.addEventListener("input", renderHierarchyTree);
 refs.textContent.addEventListener("input", previewTextChange);
 refs.applyText.addEventListener("click", commitTextChange);
+refs.textStyleFields.addEventListener("input", previewTextStyles);
+refs.textStyleFields.addEventListener("change", previewTextStyles);
+refs.applyTextStyle.addEventListener("click", commitTextStyles);
+refs.replaceTextConfirm.addEventListener("click", () => {
+  refs.replaceTextDialog.close();
+  commitTextReplacement();
+});
+refs.replaceTextDialog.addEventListener("close", () => {
+  if (refs.replaceTextDialog.returnValue === "cancel") restoreSelectedTextPreview();
+});
 refs.undo.addEventListener("click", undo);
 refs.redo.addEventListener("click", redo);
 refs.editMode.addEventListener("click", () => setMode("edit"));
@@ -611,7 +654,10 @@ function assignEditorIds(doc) {
 function applyEdits(doc) {
   Object.entries(state.edits).forEach(([id, edit]) => {
     const element = doc.querySelector(`[data-html-editor-id="${CSS.escape(id)}"]`);
-    if (element && typeof edit.text === "string") element.textContent = edit.text;
+    if (!element) return;
+    if (typeof edit.html === "string") element.innerHTML = edit.html;
+    else if (typeof edit.text === "string") element.textContent = edit.text;
+    applyTextStyleEdit(element, edit.styles);
   });
 }
 
@@ -624,6 +670,7 @@ function installEditingBoundary(frame) {
     frameDocument.addEventListener("click", handleWorkingCopyClick, true);
     frameDocument.addEventListener("transitionend", syncSelectionSurfaces, true);
     frameDocument.addEventListener("animationend", syncSelectionSurfaces, true);
+    frameDocument.addEventListener("dblclick", handleWorkingCopyDoubleClick, true);
     frame.contentWindow.addEventListener("scroll", syncSelectionSurfaces, { passive: true });
     observeWorkingCopy(frameDocument);
   } else {
@@ -640,6 +687,78 @@ function handleWorkingCopyClick(event) {
   selectObject(target);
 }
 
+function handleWorkingCopyDoubleClick(event) {
+  if (state.mode !== "edit") return;
+  const target = event.target?.closest?.("[data-html-editor-id]") || null;
+  const object = target ? objectForElement(target) : null;
+  if (!target || object?.kind !== "text") return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  selectObject(target);
+  beginInlineTextEditing(target);
+}
+
+function beginInlineTextEditing(element) {
+  if (state.inlineEditingElement === element) return;
+  finishInlineTextEditing();
+  state.inlineEditingElement = element;
+  state.inlineEditingBeforeHtml = element.innerHTML;
+  element.contentEditable = "true";
+  element.dataset.htmlEditorInlineEditing = "true";
+  element.addEventListener("keydown", handleInlineEditingKeydown);
+  element.addEventListener("input", handleInlineEditingInput);
+  element.addEventListener("paste", handleInlineEditingPaste);
+  element.addEventListener("blur", finishInlineTextEditing, { once: true });
+  refs.inlineEditStatus.hidden = false;
+  element.focus();
+}
+
+function handleInlineEditingKeydown(event) {
+  if (event.key !== "Escape") return;
+  event.preventDefault();
+  finishInlineTextEditing();
+}
+
+function handleInlineEditingInput() {
+  if (!state.inlineEditingElement) return;
+  state.pendingText = state.inlineEditingElement.textContent;
+  refs.textContent.value = state.pendingText;
+  refreshObjectLabels();
+  syncSelectionSurfaces();
+}
+
+function handleInlineEditingPaste(event) {
+  event.preventDefault();
+  const text = event.clipboardData?.getData("text/plain") || "";
+  const selection = event.currentTarget.ownerDocument.getSelection();
+  if (!selection?.rangeCount) return;
+  const range = selection.getRangeAt(0);
+  range.deleteContents();
+  const node = event.currentTarget.ownerDocument.createTextNode(text);
+  range.insertNode(node);
+  range.setStartAfter(node);
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+  handleInlineEditingInput();
+}
+
+function finishInlineTextEditing() {
+  const element = state.inlineEditingElement;
+  if (!element) return;
+  const beforeHtml = state.inlineEditingBeforeHtml;
+  const afterHtml = element.innerHTML;
+  element.removeEventListener("keydown", handleInlineEditingKeydown);
+  element.removeEventListener("input", handleInlineEditingInput);
+  element.removeEventListener("paste", handleInlineEditingPaste);
+  element.removeAttribute("contenteditable");
+  delete element.dataset.htmlEditorInlineEditing;
+  state.inlineEditingElement = null;
+  state.inlineEditingBeforeHtml = "";
+  refs.inlineEditStatus.hidden = true;
+  if (beforeHtml !== afterHtml) commitTextHtml(afterHtml);
+}
+
 function selectObject(element) {
   clearSelection();
   state.selectedElement = element;
@@ -654,6 +773,7 @@ function selectObject(element) {
   if (object.kind === "text") {
     state.pendingText = element.textContent;
     refs.textContent.value = state.pendingText;
+    populateTextStyleFields(element);
     refs.textProperties.hidden = false;
     refs.objectProperties.hidden = true;
   } else {
@@ -668,6 +788,7 @@ function selectObject(element) {
 }
 
 function clearSelection() {
+  if (state.inlineEditingElement) finishInlineTextEditing();
   if (state.selectedElement?.isConnected) {
     delete state.selectedElement.dataset.htmlEditorSelected;
   }
@@ -903,6 +1024,86 @@ function escapeHtml(value) {
 
 function commitTextChange() {
   if (!state.selectedElement || !state.selectedId) return;
+  const originalDocument = new DOMParser().parseFromString(state.originalHtml, "text/html");
+  assignEditorIds(originalDocument);
+  const originalElement = originalDocument.querySelector(
+    `[data-html-editor-id="${CSS.escape(state.selectedId)}"]`,
+  );
+  const hasInlineMarkup = originalElement?.querySelector("strong,span,code,em,b,i,mark,small,sub,sup");
+  if (hasInlineMarkup) {
+    refs.replaceTextDialog.returnValue = "";
+    refs.replaceTextDialog.showModal();
+    return;
+  }
+  commitTextReplacement();
+}
+
+function textStyleControls() {
+  return [...refs.textStyleFields.elements].filter((control) => control.name);
+}
+
+function readTextStyleControls() {
+  return Object.fromEntries(textStyleControls().map((control) => [control.name, control.value.trim()]));
+}
+
+function populateTextStyleFields(element) {
+  const computed = element.ownerDocument.defaultView.getComputedStyle(element);
+  const values = {
+    fontFamily: computed.fontFamily,
+    fontSize: parseFloat(computed.fontSize),
+    fontWeight: computed.fontWeight,
+    fontStyle: computed.fontStyle,
+    lineHeight: computed.lineHeight === "normal" ? "" : parseFloat(computed.lineHeight),
+    letterSpacing: computed.letterSpacing === "normal" ? "0" : parseFloat(computed.letterSpacing),
+    textAlign: computed.textAlign,
+    color: rgbToHex(computed.color),
+  };
+  textStyleControls().forEach((control) => {
+    control.value = String(values[control.name] ?? "");
+  });
+  state.pendingTextStyles = readTextStyleControls();
+}
+
+function rgbToHex(color) {
+  const channels = color.match(/\d+(?:\.\d+)?/g)?.slice(0, 3).map(Number);
+  if (!channels) return "#000000";
+  return `#${channels.map((channel) => Math.round(channel).toString(16).padStart(2, "0")).join("")}`;
+}
+
+function normalizeTextStyles(styles) {
+  const withPixels = new Set(["fontSize", "lineHeight", "letterSpacing"]);
+  return Object.fromEntries(Object.entries(styles).map(([property, value]) => [
+    property,
+    value && withPixels.has(property) ? `${value}px` : value,
+  ]).filter(([, value]) => value !== ""));
+}
+
+function applyTextStyleEdit(element, styles = {}) {
+  Object.entries(styles || {}).forEach(([property, value]) => {
+    element.style[property] = value;
+  });
+}
+
+function previewTextStyles() {
+  if (!state.selectedElement) return;
+  state.pendingTextStyles = readTextStyleControls();
+  applyTextStyleEdit(state.selectedElement, normalizeTextStyles(state.pendingTextStyles));
+  syncSelectionSurfaces();
+}
+
+function commitTextStyles() {
+  if (!state.selectedElement || !state.selectedId) return;
+  const before = structuredClone(state.edits);
+  const nextEdit = { ...(state.edits[state.selectedId] || {}) };
+  nextEdit.styles = normalizeTextStyles(state.pendingTextStyles);
+  if (Object.keys(nextEdit.styles).length === 0) delete nextEdit.styles;
+  if (Object.keys(nextEdit).length) state.edits[state.selectedId] = nextEdit;
+  else delete state.edits[state.selectedId];
+  commitEditSnapshot(before);
+}
+
+function commitTextReplacement() {
+  if (!state.selectedElement || !state.selectedId) return;
   const before = structuredClone(state.edits);
   const originalDocument = new DOMParser().parseFromString(state.originalHtml, "text/html");
   assignEditorIds(originalDocument);
@@ -910,9 +1111,50 @@ function commitTextChange() {
     .querySelector(`[data-html-editor-id="${CSS.escape(state.selectedId)}"]`)
     ?.textContent;
 
-  if (state.pendingText === originalText) delete state.edits[state.selectedId];
-  else state.edits[state.selectedId] = { text: state.pendingText };
+  const nextEdit = { ...(state.edits[state.selectedId] || {}) };
+  delete nextEdit.html;
+  if (state.pendingText === originalText) delete nextEdit.text;
+  else nextEdit.text = state.pendingText;
+  if (Object.keys(nextEdit).length) state.edits[state.selectedId] = nextEdit;
+  else delete state.edits[state.selectedId];
+  commitEditSnapshot(before);
+}
 
+function restoreSelectedTextPreview() {
+  if (!state.selectedElement || !state.selectedId) return;
+  const originalDocument = new DOMParser().parseFromString(state.originalHtml, "text/html");
+  assignEditorIds(originalDocument);
+  const originalElement = originalDocument.querySelector(
+    `[data-html-editor-id="${CSS.escape(state.selectedId)}"]`,
+  );
+  const edit = state.edits[state.selectedId];
+  if (typeof edit?.html === "string") state.selectedElement.innerHTML = edit.html;
+  else if (typeof edit?.text === "string") state.selectedElement.textContent = edit.text;
+  else if (originalElement) state.selectedElement.innerHTML = originalElement.innerHTML;
+  state.pendingText = state.selectedElement.textContent;
+  refs.textContent.value = state.pendingText;
+  refreshObjectLabels();
+  syncSelectionSurfaces();
+}
+
+function commitTextHtml(html) {
+  if (!state.selectedElement || !state.selectedId) return;
+  const before = structuredClone(state.edits);
+  const originalDocument = new DOMParser().parseFromString(state.originalHtml, "text/html");
+  assignEditorIds(originalDocument);
+  const originalHtml = originalDocument
+    .querySelector(`[data-html-editor-id="${CSS.escape(state.selectedId)}"]`)
+    ?.innerHTML;
+  const nextEdit = { ...(state.edits[state.selectedId] || {}) };
+  delete nextEdit.text;
+  if (html === originalHtml) delete nextEdit.html;
+  else nextEdit.html = html;
+  if (Object.keys(nextEdit).length) state.edits[state.selectedId] = nextEdit;
+  else delete state.edits[state.selectedId];
+  commitEditSnapshot(before);
+}
+
+function commitEditSnapshot(before) {
   if (JSON.stringify(before) === JSON.stringify(state.edits)) return;
   state.history.splice(state.historyIndex + 1);
   state.history.push({ before, after: structuredClone(state.edits) });
@@ -953,8 +1195,13 @@ function syncLoadedWorkingCopy() {
     const originalElement = originalDocument.querySelector(
       `[data-html-editor-id="${CSS.escape(id)}"]`,
     );
-    const text = state.edits[id]?.text ?? originalElement?.textContent;
-    if (typeof text === "string") element.textContent = text;
+    const edit = state.edits[id];
+    if (typeof edit?.html === "string") element.innerHTML = edit.html;
+    else if (typeof edit?.text === "string") element.textContent = edit.text;
+    else if (originalElement) element.innerHTML = originalElement.innerHTML;
+    for (const property of Object.keys(edit?.styles || {})) element.style.removeProperty(property);
+    if (originalElement) element.setAttribute("style", originalElement.getAttribute("style") || "");
+    applyTextStyleEdit(element, edit?.styles);
   });
   discoverObjects(currentDocument);
   renderHierarchyTree();
