@@ -128,6 +128,7 @@ app.innerHTML = `
           <p class="empty-kicker">Start with your document</p>
           <h1>把 HTML 放到工作台</h1>
           <p class="empty-description">打开一个受信任的单文件 HTML，在浏览器真实渲染结果上继续修改。</p>
+          <p class="support-boundary">发布验收仅覆盖 test1.html 与 test2.html，不代表支持所有 AI 生成的 HTML。</p>
           <button class="button empty-upload-button" type="button" data-open-html>选择本地 HTML</button>
           <div class="local-processing-note">
             <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 10V8a5 5 0 0 1 10 0v2m-11 0h12v10H6V10Z"/></svg>
@@ -221,6 +222,8 @@ app.innerHTML = `
         <p class="empty-kicker">Trusted input</p>
         <h2 id="trust-dialog-title">仅打开受信任的 HTML</h2>
         <p>文件和修改只在浏览器本地处理，不会上传到产品服务器。</p>
+        <p>本地处理不等于完全离线；原页面可能联网，外部资源与脚本保留原链接。</p>
+        <p>编辑能力正式支持最新版桌面 Chrome 或 Edge。</p>
         <p class="trust-warning"><strong>这不是安全沙箱。</strong> 原 HTML 的脚本会真实运行，原页面可能访问第三方网络资源或发送请求。</p>
         <div class="trust-dialog-actions">
           <button class="button" value="cancel">取消</button>
