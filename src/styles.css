@@ -70,6 +70,17 @@ svg { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: 
     "status status status";
 }
 
+.editor-workspace.is-preview-mode {
+  grid-template-columns: 0 minmax(520px, 1fr) 0;
+}
+.editor-workspace.is-preview-mode .hierarchy-panel,
+.editor-workspace.is-preview-mode .properties-panel,
+.editor-workspace.is-preview-mode .selection-overlay,
+.editor-workspace.is-preview-mode .measure-rule,
+.editor-workspace.is-preview-mode .canvas-coordinate {
+  display: none !important;
+}
+
 .compatibility-notice {
   grid-area: notice;
   z-index: 50;
