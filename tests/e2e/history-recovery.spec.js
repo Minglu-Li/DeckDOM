@@ -52,11 +52,12 @@ test("all edit types follow one intent history through workspace shortcuts", asy
     mimeType: "image/svg+xml",
     buffer: replacementSvg,
   });
+  await page.getByRole("dialog", { name: "选择图片适配方式" }).getByRole("button", { name: "替换图片" }).click();
   const replacementImage = await image.getAttribute("src");
 
   await headline.click();
   await page.getByRole("button", { name: "选择父容器" }).click();
-  await dragBy(page, page.getByLabel("当前选框"), 60, 30);
+  await dragBy(page, page.getByRole("button", { name: "移动所选内容" }), 60, 30);
   const movedBox = await movable.boundingBox();
   await dragBy(page, page.getByLabel("右下角等比缩放手柄"), 75, 45);
   const scaledBox = await movable.boundingBox();

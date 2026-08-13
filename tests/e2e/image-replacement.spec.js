@@ -61,6 +61,7 @@ test("user replaces only the selected image and keeps it through history, recove
     mimeType: "image/svg+xml",
     buffer: replacementSvg,
   });
+  await page.getByRole("dialog", { name: "选择图片适配方式" }).getByRole("button", { name: "替换图片" }).click();
 
   await expect(primary).toHaveAttribute("src", /^data:image\/svg\+xml;base64,/);
   expect(await primary.evaluate((image) => image.complete && image.naturalWidth === 20)).toBe(true);

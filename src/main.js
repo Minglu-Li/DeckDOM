@@ -63,7 +63,10 @@ app.innerHTML = `
     <main class="working-copy-panel" aria-labelledby="working-copy-title">
       <div class="canvas-toolbar">
         <div class="tool-state">
-          <button type="button" disabled><span class="cursor-icon" aria-hidden="true">↖</span>选择</button>
+          <div class="canvas-tool-switch" aria-label="画布工具">
+            <button type="button" data-selection-tool aria-pressed="true" disabled><span class="cursor-icon" aria-hidden="true">↖</span>选择内容</button>
+            <button type="button" data-interaction-tool aria-pressed="false" disabled><span aria-hidden="true">◎</span>操作页面</button>
+          </div>
           <span class="canvas-toolbar-rule" aria-hidden="true"></span>
           <p><span>工作副本</span><strong id="working-copy-title">尚未载入</strong></p>
         </div>
@@ -176,7 +179,7 @@ app.innerHTML = `
           <div><dt>显示尺寸</dt><dd data-image-size></dd></div>
           <div><dt>图片来源</dt><dd data-image-source></dd></div>
         </dl>
-        <p>新图片会沿用当前对象的布局尺寸和基础外观。</p>
+        <p>选择图片后可直接替换，或在当前参考视口下填充原图框。</p>
         <button class="button replace-image-button" type="button">从本地替换图片</button>
         <input id="replacement-image-input" class="visually-hidden" type="file" accept="image/*">
         <p class="image-replacement-status" role="alert" hidden></p>
@@ -243,6 +246,30 @@ app.innerHTML = `
         </div>
       </form>
     </dialog>
+
+    <dialog class="image-fit-dialog" aria-labelledby="image-fit-dialog-title">
+      <form method="dialog">
+        <p class="empty-kicker">Image replacement</p>
+        <h2 id="image-fit-dialog-title">选择图片适配方式</h2>
+        <p class="image-fit-summary"></p>
+        <fieldset class="image-fit-options">
+          <legend class="visually-hidden">图片适配方式</legend>
+          <label>
+            <input type="radio" name="imageFitMode" value="direct" checked>
+            <span><strong>直接替换</strong><small>保留新图片自身比例，继续遵循原页面布局。</small></span>
+          </label>
+          <label>
+            <input type="radio" name="imageFitMode" value="fill">
+            <span><strong>填充原图框</strong><small>保持当前参考视口下的原图宽高，居中填满并隐藏框外部分。</small></span>
+          </label>
+        </fieldset>
+        <p class="image-fit-frame-note"></p>
+        <div class="trust-dialog-actions">
+          <button class="button" value="cancel">取消</button>
+          <button class="button image-fit-confirm" type="button">替换图片</button>
+        </div>
+      </form>
+    </dialog>
   </div>
 `;
 
@@ -274,6 +301,7 @@ const state = {
   appearancePreviewBaseline: null,
   appearancePreviewDirty: false,
   mode: "edit",
+  activeTool: "selection",
   restored: false,
   inlineEditingElement: null,
   inlineEditingBeforeHtml: "",
@@ -287,6 +315,7 @@ const state = {
   canvasZoom: 0.64,
   fitCanvasActive: false,
   visualGesture: null,
+  pendingImageReplacement: null,
 };
 
 const refs = {
@@ -295,6 +324,10 @@ const refs = {
   trustConfirm: document.querySelector(".trust-confirm"),
   replaceTextDialog: document.querySelector(".replace-text-dialog"),
   replaceTextConfirm: document.querySelector(".replace-text-confirm"),
+  imageFitDialog: document.querySelector(".image-fit-dialog"),
+  imageFitSummary: document.querySelector(".image-fit-summary"),
+  imageFitFrameNote: document.querySelector(".image-fit-frame-note"),
+  imageFitConfirm: document.querySelector(".image-fit-confirm"),
   emptyState: document.querySelector(".upload-empty-state"),
   canvasStage: document.querySelector(".canvas-stage"),
   documentName: document.querySelector(".document-state strong"),
@@ -333,6 +366,8 @@ const refs = {
   redo: document.querySelector("[data-redo]"),
   editMode: document.querySelector("[data-edit-mode]"),
   previewMode: document.querySelector("[data-preview-mode]"),
+  selectionTool: document.querySelector("[data-selection-tool]"),
+  interactionTool: document.querySelector("[data-interaction-tool]"),
   exportButton: document.querySelector("[data-export]"),
   statusPath: document.querySelector(".status-path strong"),
   statusDocument: document.querySelector("[data-status-document]"),
@@ -391,6 +426,13 @@ refs.replacementImageInput.addEventListener("change", replaceSelectedImage);
 refs.replacementImageInput.addEventListener("cancel", () => {
   showImageReplacementStatus("未选择图片，原图片保持不变。");
 });
+refs.imageFitConfirm.addEventListener("click", commitPendingImageReplacement);
+refs.imageFitDialog.addEventListener("close", () => {
+  if (refs.imageFitDialog.returnValue !== "confirm" && state.pendingImageReplacement) {
+    showImageReplacementStatus("已取消替换，原图片保持不变。");
+  }
+  state.pendingImageReplacement = null;
+});
 refs.appearanceFields.addEventListener("input", previewAppearance);
 refs.appearanceFields.addEventListener("change", previewAppearance);
 refs.applyAppearance.addEventListener("click", commitAppearance);
@@ -398,13 +440,15 @@ refs.undo.addEventListener("click", undo);
 refs.redo.addEventListener("click", redo);
 refs.editMode.addEventListener("click", () => setMode("edit"));
 refs.previewMode.addEventListener("click", () => setMode("preview"));
+refs.selectionTool.addEventListener("click", () => setActiveTool("selection"));
+refs.interactionTool.addEventListener("click", () => setActiveTool("interaction"));
 refs.exportButton.addEventListener("click", exportHtml);
 refs.selectParent.addEventListener("click", selectParentContainer);
 refs.applyViewport.addEventListener("click", applyReferenceViewport);
 refs.zoomOut.addEventListener("click", () => changeCanvasZoom(-0.1));
 refs.zoomIn.addEventListener("click", () => changeCanvasZoom(0.1));
 refs.fitCanvas.addEventListener("click", fitCanvasToStage);
-document.addEventListener("keydown", handleEditorHistoryShortcut);
+document.addEventListener("keydown", handleEditorKeydown);
 
 const stageResizeObserver = new ResizeObserver(() => {
   if (state.fitCanvasActive && state.originalHtml) fitCanvasToStage();
@@ -445,6 +489,7 @@ async function importSelectedFile(event) {
     state.viewportHeight = 900;
     state.canvasZoom = 0.64;
     state.fitCanvasActive = false;
+    state.activeTool = "selection";
     try {
       await loadWorkingCopy();
       saveProject();
@@ -474,6 +519,7 @@ function captureProjectState() {
     history: structuredClone(state.history),
     historyIndex: state.historyIndex,
     mode: state.mode,
+    activeTool: state.activeTool,
     restored: state.restored,
     resources: structuredClone(state.resources),
     viewportWidth: state.viewportWidth,
@@ -523,6 +569,8 @@ function resetEmptyWorkspace() {
   refs.hierarchyCount.textContent = "0";
   refs.editMode.disabled = true;
   refs.previewMode.disabled = true;
+  refs.selectionTool.disabled = true;
+  refs.interactionTool.disabled = true;
   refs.exportButton.disabled = true;
   setViewportControlsDisabled(true);
 }
@@ -645,7 +693,7 @@ function buildWorkingCopyHtml(importToken) {
   const assistStyle = doc.createElement("style");
   assistStyle.dataset.htmlEditorAssist = "true";
   assistStyle.textContent = `
-    html[data-html-editor-mode="edit"] [data-html-editor-id] { cursor: default !important; }
+    html[data-html-editor-mode="edit"][data-html-editor-tool="selection"] [data-html-editor-id] { cursor: default !important; }
     html[data-html-editor-mode="edit"] *,
     html[data-html-editor-mode="edit"] *::before,
     html[data-html-editor-mode="edit"] *::after {
@@ -754,6 +802,7 @@ function applyEdits(doc) {
     if (!element) return;
     applyTextStyleEdit(element, edit.styles);
     applyAppearanceEdit(element, edit.appearance);
+    applyImageFrameEdit(element, edit.imageFrame);
   });
   applyVisualEditStyle(doc);
 }
@@ -795,6 +844,7 @@ function applyExportPatch(doc) {
     const declaration = doc.createElement("span").style;
     applyTextStyleEdit({ style: declaration }, edit.styles);
     applyAppearanceEdit({ style: declaration }, edit.appearance);
+    applyImageFrameEdit({ style: declaration }, edit.imageFrame);
 
     const properties = [...declaration].map((property) =>
       `${property}: ${declaration.getPropertyValue(property)} !important;`,
@@ -825,6 +875,7 @@ function installEditingBoundary(frame) {
   removeEditingBoundary(frame);
   if (state.mode === "edit") {
     frameDocument.documentElement.dataset.htmlEditorMode = "edit";
+    frameDocument.documentElement.dataset.htmlEditorTool = state.activeTool;
     frameDocument.addEventListener("click", handleWorkingCopyClick, true);
     frameDocument.addEventListener("keydown", handleWorkingCopyKeydown, true);
     frameDocument.addEventListener("transitionend", syncSelectionSurfaces, true);
@@ -834,6 +885,7 @@ function installEditingBoundary(frame) {
     observeWorkingCopy(frameDocument);
   } else {
     frameDocument.documentElement.dataset.htmlEditorMode = "preview";
+    delete frameDocument.documentElement.dataset.htmlEditorTool;
   }
 }
 
@@ -850,23 +902,38 @@ function removeEditingBoundary(frame) {
 }
 
 function handleWorkingCopyClick(event) {
-  if (state.mode !== "edit") return;
+  if (state.mode !== "edit" || state.activeTool !== "selection") return;
   const target = event.target?.closest?.("[data-html-editor-id]") || null;
   event.preventDefault();
   event.stopImmediatePropagation();
   if (target) selectObject(target);
+  else clearSelection();
 }
 
 function handleWorkingCopyKeydown(event) {
   if (state.mode !== "edit") return;
-  if (handleEditorHistoryShortcut(event)) return;
   if (event.target?.closest?.('[contenteditable="true"]')) return;
+  if (handleEditorKeydown(event)) return;
+  if (state.activeTool === "interaction") return;
   event.preventDefault();
   event.stopImmediatePropagation();
 }
 
-function handleEditorHistoryShortcut(event) {
+function handleEditorKeydown(event) {
   if (state.mode !== "edit" || !state.originalHtml) return false;
+  if (event.target?.closest?.("dialog[open]")) return false;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (state.activeTool === "interaction") setActiveTool("selection");
+    else clearSelection();
+    return true;
+  }
+  return handleEditorHistoryShortcut(event);
+}
+
+function handleEditorHistoryShortcut(event) {
+  if (state.mode !== "edit" || state.activeTool !== "selection" || !state.originalHtml) return false;
   const shortcut = event.ctrlKey || event.metaKey;
   const key = event.key.toLowerCase();
   if (shortcut && key === "z") {
@@ -886,7 +953,7 @@ function handleEditorHistoryShortcut(event) {
 }
 
 function handleWorkingCopyDoubleClick(event) {
-  if (state.mode !== "edit") return;
+  if (state.mode !== "edit" || state.activeTool !== "selection") return;
   const target = event.target?.closest?.("[data-html-editor-id]") || null;
   const object = target ? objectForElement(target) : null;
   if (!target || object?.kind !== "text") return;
@@ -1068,26 +1135,28 @@ async function replaceSelectedImage(event) {
 
   const selectedId = state.selectedId;
   const selectedElement = state.selectedElement;
+  const selectedRect = selectedElement.getBoundingClientRect();
   try {
     if (!file.type.startsWith("image/")) throw new Error("unsupported-type");
     const imageDataUrl = await readFileAsDataUrl(file);
-    await validateImageData(imageDataUrl);
+    const imageDimensions = await validateImageData(imageDataUrl);
     if (state.selectedId !== selectedId || state.selectedElement !== selectedElement) {
       throw new Error("selection-changed");
     }
 
-    const before = structuredClone(state.edits);
-    state.edits[selectedId] = {
-      ...state.edits[selectedId],
+    const hasFrame = Number.isFinite(selectedRect.width)
+      && Number.isFinite(selectedRect.height)
+      && selectedRect.width > 0
+      && selectedRect.height > 0;
+    state.pendingImageReplacement = {
+      selectedId,
+      selectedElement,
       imageDataUrl,
       imageName: file.name,
+      imageDimensions,
+      frame: hasFrame ? { width: selectedRect.width, height: selectedRect.height } : null,
     };
-    selectedElement.setAttribute("src", imageDataUrl);
-    selectedElement.removeAttribute("srcset");
-    recordEditHistory(before);
-    hideImageReplacementStatus();
-    updateImageProperties();
-    syncSelectionSurfaces();
+    showImageFitDialog();
   } catch (error) {
     console.error("Unable to replace the selected image", error);
     const message = error?.message === "selection-changed"
@@ -1111,12 +1180,73 @@ function validateImageData(source) {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.addEventListener("load", () => {
-      if (image.naturalWidth > 0 && image.naturalHeight > 0) resolve();
+      if (image.naturalWidth > 0 && image.naturalHeight > 0) {
+        resolve({ width: image.naturalWidth, height: image.naturalHeight });
+      }
       else reject(new Error("invalid-image"));
     }, { once: true });
     image.addEventListener("error", () => reject(new Error("invalid-image")), { once: true });
     image.src = source;
   });
+}
+
+function showImageFitDialog() {
+  const pending = state.pendingImageReplacement;
+  if (!pending) return;
+  const direct = refs.imageFitDialog.querySelector('[value="direct"]');
+  const fill = refs.imageFitDialog.querySelector('[value="fill"]');
+  direct.checked = true;
+  fill.checked = false;
+  fill.disabled = !pending.frame;
+  refs.imageFitSummary.textContent = `${pending.imageName} · ${pending.imageDimensions.width} × ${pending.imageDimensions.height}`;
+  refs.imageFitFrameNote.textContent = pending.frame
+    ? `原图框 ${Math.round(pending.frame.width)} × ${Math.round(pending.frame.height)}；填充只保证当前参考视口下的效果。`
+    : "当前图片没有可用的渲染宽高，因此不能填充原图框。";
+  refs.imageFitDialog.returnValue = "";
+  refs.imageFitDialog.showModal();
+}
+
+function commitPendingImageReplacement() {
+  const pending = state.pendingImageReplacement;
+  if (!pending) return;
+  if (state.selectedId !== pending.selectedId || state.selectedElement !== pending.selectedElement) {
+    refs.imageFitDialog.close();
+    showImageReplacementStatus("确认图片时选择目标已改变，原图片保持不变。");
+    return;
+  }
+  const mode = refs.imageFitDialog.querySelector('[name="imageFitMode"]:checked')?.value || "direct";
+  const before = structuredClone(state.edits);
+  const nextEdit = {
+    ...state.edits[pending.selectedId],
+    imageDataUrl: pending.imageDataUrl,
+    imageName: pending.imageName,
+  };
+  if (mode === "fill" && pending.frame) {
+    nextEdit.imageFrame = {
+      width: pending.frame.width,
+      height: pending.frame.height,
+      objectFit: "cover",
+      objectPosition: "center center",
+    };
+  } else {
+    delete nextEdit.imageFrame;
+  }
+  state.edits[pending.selectedId] = nextEdit;
+  refs.imageFitDialog.close("confirm");
+  state.pendingImageReplacement = null;
+  syncLoadedWorkingCopy();
+  recordEditHistory(before);
+  hideImageReplacementStatus();
+  updateImageProperties();
+  syncSelectionSurfaces();
+}
+
+function applyImageFrameEdit(element, frame) {
+  if (!frame || !element?.style) return;
+  element.style.setProperty("width", `${frame.width}px`, "important");
+  element.style.setProperty("height", `${frame.height}px`, "important");
+  element.style.setProperty("object-fit", frame.objectFit || "cover", "important");
+  element.style.setProperty("object-position", frame.objectPosition || "center center", "important");
 }
 
 function showImageReplacementStatus(message) {
@@ -1290,7 +1420,7 @@ function selectParentContainer() {
 
 function syncSelectionSurfaces() {
   const element = state.selectedElement;
-  if (!element?.isConnected || state.mode !== "edit") return;
+  if (!element?.isConnected || state.mode !== "edit" || state.activeTool !== "selection") return;
   const object = objectForElement(element);
   if (!object) return;
   refs.statusPath.textContent = buildObjectPath(element);
@@ -1318,7 +1448,7 @@ function renderSelectionOverlay(element, object) {
     overlay.className = "selection-overlay";
     overlay.setAttribute("aria-label", "当前选框");
     overlay.innerHTML = `
-      <span class="selection-overlay-label"></span>
+      <button type="button" class="selection-overlay-label" data-move-handle aria-label="移动所选内容"></button>
       <button type="button" class="scale-handle scale-handle-nw" data-scale-handle aria-label="左上角等比缩放手柄"></button>
       <button type="button" class="scale-handle scale-handle-ne" data-scale-handle aria-label="右上角等比缩放手柄"></button>
       <button type="button" class="scale-handle scale-handle-sw" data-scale-handle aria-label="左下角等比缩放手柄"></button>
@@ -1341,7 +1471,10 @@ function renderSelectionOverlay(element, object) {
   overlay.style.top = `${frameRect.top - stageRect.top + elementRect.top * scaleY}px`;
   overlay.style.width = `${Math.max(3, elementRect.width * scaleX)}px`;
   overlay.style.height = `${Math.max(3, elementRect.height * scaleY)}px`;
-  overlay.querySelector(".selection-overlay-label").textContent = `${object.tag} · ${object.statusLabel}`;
+  const statusLabel = object.kind === "container" && object.status === "editable"
+    ? "可调整"
+    : object.statusLabel;
+  overlay.querySelector(".selection-overlay-label").textContent = `${object.tag} · ${statusLabel}`;
 }
 
 function scheduleSelectionSync() {
@@ -1354,6 +1487,7 @@ function scheduleSelectionSync() {
 
 function beginVisualGesture(event) {
   if (event.button !== 0 || !state.selectedElement || !state.selectedId) return;
+  if (!event.target.closest("[data-move-handle], [data-scale-handle]")) return;
   const object = objectForElement(state.selectedElement);
   if (!object || object.status !== "editable" || !["text", "image", "container"].includes(object.kind)) return;
   event.preventDefault();
@@ -1708,6 +1842,7 @@ function syncLoadedWorkingCopy() {
     } else {
       element.removeAttribute("srcset");
     }
+    applyImageFrameEdit(element, state.edits[id]?.imageFrame);
   });
   applyVisualEditStyle(currentDocument);
   discoverObjects(currentDocument);
@@ -1721,6 +1856,7 @@ function syncLoadedWorkingCopy() {
 async function setMode(mode) {
   if (!state.originalHtml || state.mode === mode) return;
   state.mode = mode;
+  state.activeTool = "selection";
   refs.editMode.setAttribute("aria-pressed", String(mode === "edit"));
   refs.previewMode.setAttribute("aria-pressed", String(mode === "preview"));
   clearSelection();
@@ -1728,9 +1864,33 @@ async function setMode(mode) {
   if (frame) installEditingBoundary(frame);
   refs.workingCopyTitle.textContent = mode === "edit" ? "编辑模式" : "预览模式";
   document.querySelector(".editor-workspace").classList.toggle("is-preview-mode", mode === "preview");
-  refs.hierarchyTree.inert = mode === "preview";
-  document.querySelector(".properties-panel").inert = mode === "preview";
+  updateToolChrome();
   saveProject();
+}
+
+function setActiveTool(tool) {
+  if (!state.originalHtml || state.mode !== "edit" || state.activeTool === tool) return;
+  state.activeTool = tool;
+  clearSelection();
+  const frame = document.querySelector(".working-copy-frame");
+  if (frame?.contentDocument) frame.contentDocument.documentElement.dataset.htmlEditorTool = tool;
+  updateToolChrome();
+}
+
+function updateToolChrome() {
+  const interaction = state.mode === "edit" && state.activeTool === "interaction";
+  refs.selectionTool.setAttribute("aria-pressed", String(!interaction));
+  refs.interactionTool.setAttribute("aria-pressed", String(interaction));
+  document.querySelector(".editor-workspace").classList.toggle("is-interaction-tool", interaction);
+  refs.hierarchyTree.inert = state.mode === "preview" || interaction;
+  document.querySelector(".properties-panel").inert = state.mode === "preview" || interaction;
+  refs.workingCopyTitle.textContent = state.mode === "preview"
+    ? "预览模式"
+    : interaction
+      ? "编辑模式 · 操作页面"
+      : "编辑模式 · 选择内容";
+  refs.selectionTool.disabled = !state.originalHtml || state.mode !== "edit";
+  refs.interactionTool.disabled = !state.originalHtml || state.mode !== "edit";
 }
 
 function saveProject() {
@@ -1827,13 +1987,14 @@ function updateProjectChrome(frame) {
   refs.statusDocument.innerHTML = `<i class="status-dot status-dot-supported"></i>${state.restored ? "已从浏览器恢复" : "文档已载入"}`;
   refs.editMode.disabled = false;
   refs.previewMode.disabled = false;
+  refs.selectionTool.disabled = false;
+  refs.interactionTool.disabled = false;
   refs.exportButton.disabled = false;
   setViewportControlsDisabled(false);
   refs.editMode.setAttribute("aria-pressed", String(state.mode === "edit"));
   refs.previewMode.setAttribute("aria-pressed", String(state.mode === "preview"));
   document.querySelector(".editor-workspace").classList.toggle("is-preview-mode", state.mode === "preview");
-  refs.hierarchyTree.inert = state.mode === "preview";
-  document.querySelector(".properties-panel").inert = state.mode === "preview";
+  updateToolChrome();
   updateResourceStatus();
   syncHistoryButtons();
 }

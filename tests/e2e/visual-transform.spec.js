@@ -42,8 +42,8 @@ test("user moves one object continuously without reflowing its flex neighbor", a
 
   const before = await geometry(workingCopy);
   const renderedBefore = await workingCopy.locator("#target").boundingBox();
-  const overlay = page.getByLabel("当前选框");
-  const overlayBefore = await overlay.boundingBox();
+  const moveHandle = page.getByRole("button", { name: "移动所选内容" });
+  const overlayBefore = await moveHandle.boundingBox();
   await page.mouse.move(overlayBefore.x + overlayBefore.width / 2, overlayBefore.y + overlayBefore.height / 2);
   await page.mouse.down();
   await page.mouse.move(overlayBefore.x + overlayBefore.width / 2 + 90, overlayBefore.y + overlayBefore.height / 2 + 45, { steps: 4 });
@@ -111,7 +111,7 @@ test("visual transforms target only the selected text or image stable object", a
   const imageBefore = await workingCopy.locator("#photo").boundingBox();
 
   await workingCopy.getByText("当前文字", { exact: true }).click();
-  await dragBy(page, page.getByLabel("当前选框"), 64, -24);
+  await dragBy(page, page.getByRole("button", { name: "移动所选内容" }), 64, -24);
   const textMoved = await workingCopy.locator("#copy-a").boundingBox();
   const peerAfter = await workingCopy.locator("#copy-b").boundingBox();
   expect(textMoved.x).toBeCloseTo(textBefore.x + 64, 0);

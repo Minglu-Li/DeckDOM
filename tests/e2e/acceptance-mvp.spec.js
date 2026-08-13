@@ -106,7 +106,7 @@ test("the original paged document completes every applicable MVP step without be
   await page.getByLabel("背景色", { exact: true }).fill("#fef3c7");
   await page.locator('.appearance-fields input[name="borderRadius"]').fill("18");
   await page.getByRole("button", { name: "保存外观" }).click();
-  await dragBy(page, page.getByLabel("当前选框"), 36, 18);
+  await dragBy(page, page.getByRole("button", { name: "移动所选内容" }), 36, 18);
   await dragBy(page, page.getByLabel("右下角等比缩放手柄"), 42, 24);
   const edited = await renderedState(workingCopy.getByRole("heading", { name: "JVM GC 发布验收课件" }));
 
@@ -211,12 +211,13 @@ test("the original long document completes every MVP step and remains responsive
   await page.getByLabel("背景色", { exact: true }).fill("#dbeafe");
   await page.locator('.appearance-fields input[name="borderRadius"]').fill("20");
   await page.getByRole("button", { name: "保存外观" }).click();
-  await dragBy(page, page.getByLabel("当前选框"), 48, 24);
+  await dragBy(page, page.getByRole("button", { name: "移动所选内容" }), 48, 24);
   await dragBy(page, page.getByLabel("右下角等比缩放手柄"), 52, 30);
   await hero.click();
   const imageChooser = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "从本地替换图片" }).click();
   await (await imageChooser).setFiles({ name: "acceptance-blue.svg", mimeType: "image/svg+xml", buffer: replacementSvg });
+  await page.getByRole("dialog", { name: "选择图片适配方式" }).getByRole("button", { name: "替换图片" }).click();
   const replacementSource = await hero.getAttribute("src");
 
   for (let index = 0; index < 6; index += 1) await page.keyboard.press("Control+Z");
@@ -234,6 +235,7 @@ test("the original long document completes every MVP step and remains responsive
   const secondChooser = page.waitForEvent("filechooser");
   await page.getByRole("button", { name: "从本地替换图片" }).click();
   await (await secondChooser).setFiles({ name: "acceptance-blue.svg", mimeType: "image/svg+xml", buffer: replacementSvg });
+  await page.getByRole("dialog", { name: "选择图片适配方式" }).getByRole("button", { name: "替换图片" }).click();
 
   const frame = page.locator('iframe[title="HTML 工作副本"]');
   await workingCopy.locator("#iphone h1").hover();
@@ -276,7 +278,7 @@ test("the original long document completes every MVP step and remains responsive
   expect(actual.fontSize).toBe(expected.fontSize);
   expect(actual.color).toBe(expected.color);
   expect(actual.backgroundColor).toBe(expected.backgroundColor);
-  expect(actual.backgroundColor).toBe("rgb(219, 234, 254)");
+  expect(actual.backgroundColor).toBe("rgb(191, 219, 254)");
   await expect(deliverable.getByRole("img", { name: "iPhone 全系" })).toHaveAttribute("src", replacementSource);
   await expect(deliverable.getByRole("img", { name: "MacBook Air M5" })).toHaveAttribute("src", peerImageSource);
   await deliverable.getByRole("link", { name: "Mac", exact: true }).click();

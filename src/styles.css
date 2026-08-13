@@ -217,6 +217,12 @@ svg { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: 
 .canvas-toolbar { z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 12px; background: #f4f6fa; border-bottom: 1px solid var(--line); }
 .tool-state, .viewport-tools { display: flex; align-items: center; gap: 8px; }
 .tool-state button, .viewport-tools button { height: 27px; padding: 0 9px; color: #586479; font-size: 9px; background: #fff; border: 1px solid var(--line-strong); border-radius: 4px; }
+.canvas-tool-switch { display: flex; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 4px; }
+.canvas-tool-switch button { border: 0; border-right: 1px solid var(--line); border-radius: 0; }
+.canvas-tool-switch button:last-child { border-right: 0; }
+.canvas-tool-switch button[aria-pressed="true"] { color: var(--blue-dark); background: #eaf0ff; box-shadow: inset 0 -2px var(--blue); }
+.editor-workspace.is-interaction-tool .hierarchy-panel,
+.editor-workspace.is-interaction-tool .properties-panel { opacity: 0.58; }
 .tool-state p { display: flex; flex-direction: column; gap: 1px; margin: 0; }
 .tool-state p span, .viewport-label { color: #9aa3b3; font: 500 7px/1 "Cascadia Mono", Consolas, monospace; letter-spacing: 0.07em; text-transform: uppercase; }
 .tool-state p strong { color: #555f70; font-size: 9px; font-weight: 600; }
@@ -256,10 +262,12 @@ svg { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: 
   transform: translate(-50%, -50%) scale(var(--canvas-zoom, 0.64));
   transform-origin: center;
 }
-.selection-overlay { position: absolute; z-index: 4; color: #fff; font: 600 8px/20px "Cascadia Mono", Consolas, monospace; border: 2px solid var(--blue); cursor: move; touch-action: none; }
+.selection-overlay { position: absolute; z-index: 4; color: #fff; font: 600 8px/20px "Cascadia Mono", Consolas, monospace; border: 2px solid var(--blue); pointer-events: none; }
 .selection-overlay.is-inline-editing { pointer-events: none; }
-.selection-overlay-label { position: absolute; top: -22px; left: -2px; height: 20px; padding: 0 6px; background: var(--blue); white-space: nowrap; pointer-events: none; }
-.scale-handle { position: absolute; width: 12px; height: 12px; padding: 0; background: #fff; border: 2px solid var(--blue); border-radius: 50%; touch-action: none; }
+.selection-overlay.is-inline-editing > * { pointer-events: none; }
+.selection-overlay-label { position: absolute; top: -22px; left: -2px; height: 20px; padding: 0 6px; color: inherit; font: inherit; border: 0; border-radius: 0; background: var(--blue); white-space: nowrap; pointer-events: auto; cursor: move; touch-action: none; }
+.selection-overlay-label:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.scale-handle { position: absolute; width: 12px; height: 12px; padding: 0; background: #fff; border: 2px solid var(--blue); border-radius: 50%; pointer-events: auto; touch-action: none; }
 .scale-handle-nw { top: -7px; left: -7px; cursor: nwse-resize; }
 .scale-handle-ne { top: -7px; right: -7px; cursor: nesw-resize; }
 .scale-handle-sw { bottom: -7px; left: -7px; cursor: nesw-resize; }
@@ -392,7 +400,7 @@ svg { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: 
 .selection-actions { padding: 0 15px 18px; }
 .select-parent-button { width: 100%; }
 
-.trust-dialog, .replace-text-dialog {
+.trust-dialog, .replace-text-dialog, .image-fit-dialog {
   width: min(460px, calc(100% - 36px));
   padding: 0;
   color: var(--ink);
@@ -401,16 +409,26 @@ svg { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: 
   border-radius: 9px;
   box-shadow: 0 28px 90px rgba(4, 10, 24, 0.42);
 }
-.trust-dialog::backdrop, .replace-text-dialog::backdrop { background: rgba(10, 17, 31, 0.7); backdrop-filter: blur(3px); }
-.trust-dialog form, .replace-text-dialog form { padding: 27px; }
+.trust-dialog::backdrop, .replace-text-dialog::backdrop, .image-fit-dialog::backdrop { background: rgba(10, 17, 31, 0.7); backdrop-filter: blur(3px); }
+.trust-dialog form, .replace-text-dialog form, .image-fit-dialog form { padding: 27px; }
 .trust-dialog-icon { display: grid; width: 43px; height: 43px; place-items: center; margin-bottom: 18px; color: var(--blue); font: 650 10px/1 "Cascadia Mono", Consolas, monospace; background: var(--blue-soft); border-radius: 7px; }
-.trust-dialog h2, .replace-text-dialog h2 { margin: 0 0 10px; font: 650 21px/1.3 "Bahnschrift", "Microsoft YaHei UI", sans-serif; }
-.trust-dialog p:not(.empty-kicker), .replace-text-dialog p:not(.empty-kicker) { margin: 0 0 10px; color: #667186; font-size: 11px; line-height: 1.65; }
+.trust-dialog h2, .replace-text-dialog h2, .image-fit-dialog h2 { margin: 0 0 10px; font: 650 21px/1.3 "Bahnschrift", "Microsoft YaHei UI", sans-serif; }
+.trust-dialog p:not(.empty-kicker), .replace-text-dialog p:not(.empty-kicker), .image-fit-dialog p:not(.empty-kicker) { margin: 0 0 10px; color: #667186; font-size: 11px; line-height: 1.65; }
 .trust-dialog .trust-warning { padding: 11px 12px; color: #76551b; background: var(--amber-soft); border: 1px solid #eed7a4; border-radius: 5px; }
 .trust-warning strong { color: #60400c; }
 .trust-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 21px; }
 .trust-dialog .trust-confirm { color: #fff; background: var(--blue); border-color: var(--blue); }
 .replace-text-dialog .replace-text-confirm { color: #fff; background: var(--red); border-color: var(--red); }
+.image-fit-options { display: grid; gap: 9px; padding: 0; border: 0; }
+.image-fit-options label { display: flex; align-items: flex-start; gap: 10px; padding: 12px; background: #f8faff; border: 1px solid var(--line-strong); border-radius: 6px; cursor: pointer; }
+.image-fit-options label:has(input:checked) { background: var(--blue-soft); border-color: #9db0fb; box-shadow: inset 3px 0 var(--blue); }
+.image-fit-options label:has(input:disabled) { opacity: 0.48; cursor: not-allowed; }
+.image-fit-options input { margin-top: 2px; accent-color: var(--blue); }
+.image-fit-options span { display: grid; gap: 3px; }
+.image-fit-options strong { font-size: 11px; }
+.image-fit-options small { color: #6d778a; font-size: 10px; line-height: 1.45; }
+.image-fit-frame-note { margin-top: 10px !important; padding-left: 10px; border-left: 2px solid #b6c4f8; }
+.image-fit-confirm { color: #fff; background: var(--blue); border-color: var(--blue); }
 
 .statusbar { grid-area: status; z-index: 20; display: flex; align-items: center; justify-content: space-between; min-width: 0; padding: 0 13px; color: #7a8496; font: 500 8px/1 "Cascadia Mono", Consolas, monospace; background: #f7f9fc; border-top: 1px solid var(--line); }
 .status-path, .status-items { display: flex; align-items: center; gap: 13px; }

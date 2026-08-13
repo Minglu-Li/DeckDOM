@@ -102,7 +102,7 @@ test("downloads one clean high-fidelity deliverable with every MVP edit material
   await page.locator('.appearance-fields input[name="borderRadius"]').fill("18");
   await page.getByRole("button", { name: "保存外观" }).click();
 
-  await dragBy(page, page.getByLabel("当前选框"), 64, 32);
+  await dragBy(page, page.getByRole("button", { name: "移动所选内容" }), 64, 32);
   await dragBy(page, page.getByLabel("右下角等比缩放手柄"), 48, 28);
 
   await workingCopy.locator("#photo").click();
@@ -113,6 +113,7 @@ test("downloads one clean high-fidelity deliverable with every MVP edit material
     mimeType: "image/svg+xml",
     buffer: replacementSvg,
   });
+  await page.getByRole("dialog", { name: "选择图片适配方式" }).getByRole("button", { name: "替换图片" }).click();
 
   const expectedTarget = await renderedState(target);
   const expectedPeer = await renderedState(peer);
