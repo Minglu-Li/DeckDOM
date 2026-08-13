@@ -1,0 +1,24 @@
+# HTML Visual Editor
+
+面向桌面 Chrome 和 Edge 的本地优先 HTML 展示文档编辑器。
+
+## 本地开发
+
+安装依赖后，使用仓库的单一开发命令启动应用：
+
+```powershell
+npm run dev
+```
+
+Vite 会输出本地访问地址。用户文档后续由浏览器本地处理；开发服务器只分发编辑器自身的静态资源。
+
+打开应用后，确认受信任输入提示并选择一个本地 `.html` 文件。当前最小闭环支持在工作副本中选择普通文字对象、从对象属性区修改文字、撤销与重做、刷新恢复、预览原页面交互，以及导出独立的单文件 HTML。原始本地文件不会被编辑器覆盖。
+
+## 验证
+
+```powershell
+npm run build
+npm run test:e2e
+```
+
+端到端测试使用真实 Chromium，并直接载入 `testexample/test1.html` 与 `testexample/test2.html` 两份未经预处理的验收样例。后续垂直切片继续沿用这一最高层测试入口。
