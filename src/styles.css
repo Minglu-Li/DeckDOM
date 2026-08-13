@@ -265,7 +265,7 @@ svg { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: 
 .scale-handle-sw { bottom: -7px; left: -7px; cursor: nesw-resize; }
 .scale-handle-se { right: -7px; bottom: -7px; cursor: nwse-resize; }
 
-.import-diagnostic {
+.import-diagnostic, .local-project-diagnostic {
   position: absolute;
   z-index: 12;
   top: 30px;
@@ -280,9 +280,10 @@ svg { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: 
   transform: translateX(-50%);
 }
 .diagnostic-kicker { margin: 0 0 5px; color: var(--red); font: 600 8px/1 "Cascadia Mono", Consolas, monospace; letter-spacing: 0.14em; text-transform: uppercase; }
-.import-diagnostic h2 { margin: 0 0 7px; font-size: 16px; }
+.import-diagnostic h2, .local-project-diagnostic h2 { margin: 0 0 7px; font-size: 16px; }
 .import-diagnostic-message { margin: 0 0 13px; font-size: 11px; line-height: 1.6; }
-.import-diagnostic .button { color: #fff; background: var(--red); border-color: var(--red); }
+.local-project-diagnostic > p:not(.diagnostic-kicker) { margin: 0 0 13px; font-size: 11px; line-height: 1.6; }
+.import-diagnostic .button, .local-project-diagnostic .button { color: #fff; background: var(--red); border-color: var(--red); }
 
 .resource-status {
   position: absolute;

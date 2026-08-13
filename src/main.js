@@ -100,6 +100,13 @@ app.innerHTML = `
           <button class="button" type="button" data-retry-import>重新选择 HTML</button>
         </section>
 
+        <section class="local-project-diagnostic" role="alert" aria-labelledby="local-project-diagnostic-title" hidden>
+          <p class="diagnostic-kicker">Recovery error</p>
+          <h2 id="local-project-diagnostic-title">本地项目无法恢复</h2>
+          <p>最近项目数据已损坏，编辑器没有载入不完整内容。请清除损坏数据并重新选择 HTML。</p>
+          <button class="button" type="button" data-clear-local-project>清除损坏数据并重新开始</button>
+        </section>
+
         <section class="resource-status" role="status" aria-labelledby="resource-status-title" hidden>
           <div class="resource-status-heading">
             <div>
@@ -329,6 +336,7 @@ const refs = {
   statusResources: document.querySelector("[data-resource-summary]"),
   importDiagnostic: document.querySelector(".import-diagnostic"),
   importDiagnosticMessage: document.querySelector(".import-diagnostic-message"),
+  localProjectDiagnostic: document.querySelector(".local-project-diagnostic"),
   resourceStatus: document.querySelector(".resource-status"),
   resourceStatusSummary: document.querySelector(".resource-status-summary"),
   resourceList: document.querySelector(".resource-status ul"),
@@ -348,6 +356,7 @@ document.querySelectorAll("[data-open-html]").forEach((button) => {
   button.addEventListener("click", openTrustDialog);
 });
 document.querySelector("[data-retry-import]").addEventListener("click", openTrustDialog);
+document.querySelector("[data-clear-local-project]").addEventListener("click", clearCorruptedLocalProject);
 document
   .querySelector('.resource-status button[aria-label="关闭资源状态"]')
   .addEventListener("click", () => {
@@ -392,6 +401,7 @@ refs.applyViewport.addEventListener("click", applyReferenceViewport);
 refs.zoomOut.addEventListener("click", () => changeCanvasZoom(-0.1));
 refs.zoomIn.addEventListener("click", () => changeCanvasZoom(0.1));
 refs.fitCanvas.addEventListener("click", fitCanvasToStage);
+document.addEventListener("keydown", handleEditorHistoryShortcut);
 
 const stageResizeObserver = new ResizeObserver(() => {
   if (state.fitCanvasActive && state.originalHtml) fitCanvasToStage();
@@ -486,6 +496,19 @@ function showImportError(message) {
 
 function hideImportError() {
   refs.importDiagnostic.hidden = true;
+}
+
+function clearCorruptedLocalProject() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    refs.localProjectDiagnostic.hidden = true;
+    refs.statusDocument.innerHTML = '<i class="status-dot status-dot-idle"></i>等待文档';
+    resetEmptyWorkspace();
+  } catch (error) {
+    refs.localProjectDiagnostic.querySelector("p:nth-of-type(2)").textContent =
+      "无法清除损坏的本地数据。请在浏览器站点设置中清除此站点的数据，再重新打开编辑器。";
+    console.error("Unable to clear the corrupted local project", error);
+  }
 }
 
 function resetEmptyWorkspace() {
@@ -797,6 +820,14 @@ function handleWorkingCopyClick(event) {
 
 function handleWorkingCopyKeydown(event) {
   if (state.mode !== "edit") return;
+  if (handleEditorHistoryShortcut(event)) return;
+  if (event.target?.closest?.('[contenteditable="true"]')) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}
+
+function handleEditorHistoryShortcut(event) {
+  if (state.mode !== "edit" || !state.originalHtml) return false;
   const shortcut = event.ctrlKey || event.metaKey;
   const key = event.key.toLowerCase();
   if (shortcut && key === "z") {
@@ -804,17 +835,15 @@ function handleWorkingCopyKeydown(event) {
     event.stopImmediatePropagation();
     if (event.shiftKey) redo();
     else undo();
-    return;
+    return true;
   }
   if (shortcut && key === "y") {
     event.preventDefault();
     event.stopImmediatePropagation();
     redo();
-    return;
+    return true;
   }
-  if (event.target?.closest?.('[contenteditable="true"]')) return;
-  event.preventDefault();
-  event.stopImmediatePropagation();
+  return false;
 }
 
 function handleWorkingCopyDoubleClick(event) {
@@ -1572,9 +1601,9 @@ function recordEditHistory(before) {
   state.history.splice(state.historyIndex + 1);
   state.history.push({ before, after: structuredClone(state.edits) });
   state.historyIndex = state.history.length - 1;
-  saveProject();
+  const saved = saveProject();
   syncHistoryButtons();
-  refs.documentStatus.textContent = "已保存到浏览器";
+  if (saved) refs.documentStatus.textContent = "已保存到浏览器";
 }
 
 function undo() {
@@ -1680,21 +1709,30 @@ function saveProject() {
   };
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
+    return true;
   } catch (error) {
-    refs.documentStatus.textContent = "本地保存失败，请尽快导出";
+    refs.documentStatus.textContent = error?.name === "QuotaExceededError"
+      ? "本地空间不足，修改尚未保存；请立即导出 HTML"
+      : "本地保存失败，修改尚未保存；请立即导出 HTML";
+    refs.statusDocument.innerHTML = '<i class="status-dot status-dot-error"></i>本地保存失败';
     console.error("Unable to save the local project", error);
+    return false;
   }
 }
 
 function restoreRecentProject() {
   let project;
   try {
-    project = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+    const savedProject = localStorage.getItem(STORAGE_KEY);
+    if (savedProject == null) return;
+    project = JSON.parse(savedProject);
+    if (!isRecoverableProject(project)) throw new Error("invalid-project-shape");
   } catch (error) {
     console.error("Unable to read the local project", error);
+    refs.localProjectDiagnostic.hidden = false;
+    refs.statusDocument.innerHTML = '<i class="status-dot status-dot-error"></i>本地项目恢复错误';
     return;
   }
-  if (!project?.originalHtml || !project?.sourceName) return;
 
   state.sourceName = project.sourceName;
   state.originalHtml = project.originalHtml;
@@ -1715,6 +1753,22 @@ function restoreRecentProject() {
   state.restored = true;
   state.resources = inspectDeclaredResources(project.originalHtml);
   loadWorkingCopy();
+}
+
+function isRecoverableProject(project) {
+  if (!project || typeof project !== "object") return false;
+  if (typeof project.sourceName !== "string" || !project.sourceName) return false;
+  if (typeof project.originalHtml !== "string" || !project.originalHtml) return false;
+  if (project.edits != null && (typeof project.edits !== "object" || Array.isArray(project.edits))) return false;
+  if (project.history != null && !Array.isArray(project.history)) return false;
+  const history = project.history || [];
+  if (!history.every((entry) => entry && typeof entry.before === "object" && typeof entry.after === "object")) {
+    return false;
+  }
+  return project.historyIndex == null
+    || (Number.isInteger(project.historyIndex)
+      && project.historyIndex >= -1
+      && project.historyIndex < history.length);
 }
 
 function updateProjectChrome(frame) {
