@@ -335,7 +335,7 @@ svg { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: 
 .properties-empty p { margin: 0; color: #8b95a6; font-size: 10px; line-height: 1.65; }
 .property-placeholders { padding: 0 15px; opacity: 0.7; }
 .property-placeholders span { display: block; height: 42px; margin-bottom: 9px; background: linear-gradient(90deg, #f3f5f8 35%, #f8f9fb 35%); border: 1px solid #edf0f4; border-radius: 4px; }
-.text-properties { padding: 18px 15px; }
+.text-properties, .image-properties { padding: 18px 15px; }
 .object-summary { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .object-summary strong { color: #39465a; font-size: 11px; }
 .object-summary span { padding: 3px 6px; color: #167556; font-size: 8px; background: #e5f5ef; border-radius: 10px; }
@@ -353,6 +353,14 @@ svg { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: 
 .apply-text-style-button { width: 100%; color: var(--blue); border-color: #b9c6f5; background: var(--blue-soft); }
 .object-properties { padding: 18px 15px; }
 .object-message { margin: 0 0 15px; color: #7b8698; font-size: 10px; line-height: 1.65; }
+.image-properties > p { margin: 8px 0 13px; color: #8b95a6; font-size: 9px; line-height: 1.55; }
+.image-details { display: grid; gap: 7px; margin: 0; }
+.image-details div { padding: 8px 9px; background: #f8fafc; border: 1px solid var(--line); border-radius: 4px; }
+.image-details dt { margin-bottom: 3px; color: #8b95a6; font-size: 8px; letter-spacing: .08em; text-transform: uppercase; }
+.image-details dd { overflow-wrap: anywhere; margin: 0; color: #39465a; font-size: 10px; line-height: 1.45; }
+.replace-image-button { width: 100%; color: #fff; background: var(--blue); border-color: var(--blue); }
+.replace-image-button:hover { color: #fff; background: var(--blue-dark); border-color: var(--blue-dark); }
+.image-replacement-status { margin-top: 10px !important; padding: 8px 9px; color: #9a3412 !important; background: #fff7ed; border-left: 3px solid #c2410c; }
 .selection-actions { padding: 0 15px 18px; }
 .select-parent-button { width: 100%; }
 

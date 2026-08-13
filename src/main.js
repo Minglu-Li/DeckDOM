@@ -161,6 +161,18 @@ app.innerHTML = `
         </fieldset>
         <button class="button apply-text-style-button" type="button">保存字体属性</button>
       </section>
+      <section class="image-properties" aria-label="当前图片" hidden>
+        <div class="object-summary"><strong>图片对象</strong><span>可替换</span></div>
+        <dl class="image-details">
+          <div><dt>替代文字</dt><dd data-image-alt></dd></div>
+          <div><dt>显示尺寸</dt><dd data-image-size></dd></div>
+          <div><dt>图片来源</dt><dd data-image-source></dd></div>
+        </dl>
+        <p>新图片会沿用当前对象的布局尺寸和基础外观。</p>
+        <button class="button replace-image-button" type="button">从本地替换图片</button>
+        <input id="replacement-image-input" class="visually-hidden" type="file" accept="image/*">
+        <p class="image-replacement-status" role="alert" hidden></p>
+      </section>
       <section class="object-properties" aria-label="当前对象" hidden>
         <div class="object-summary"><strong></strong><span></span></div>
         <p class="object-message"></p>
@@ -266,6 +278,13 @@ const refs = {
   applyText: document.querySelector(".apply-text-button"),
   textStyleFields: document.querySelector(".text-style-fields"),
   applyTextStyle: document.querySelector(".apply-text-style-button"),
+  imageProperties: document.querySelector(".image-properties"),
+  imageAlt: document.querySelector("[data-image-alt]"),
+  imageSize: document.querySelector("[data-image-size]"),
+  imageSource: document.querySelector("[data-image-source]"),
+  replaceImage: document.querySelector(".replace-image-button"),
+  replacementImageInput: document.querySelector("#replacement-image-input"),
+  imageReplacementStatus: document.querySelector(".image-replacement-status"),
   objectProperties: document.querySelector(".object-properties"),
   objectSummary: document.querySelector(".object-properties .object-summary"),
   objectMessage: document.querySelector(".object-message"),
@@ -324,6 +343,14 @@ refs.replaceTextConfirm.addEventListener("click", () => {
 });
 refs.replaceTextDialog.addEventListener("close", () => {
   if (refs.replaceTextDialog.returnValue === "cancel") restoreSelectedTextPreview();
+});
+refs.replaceImage.addEventListener("click", () => {
+  hideImageReplacementStatus();
+  refs.replacementImageInput.click();
+});
+refs.replacementImageInput.addEventListener("change", replaceSelectedImage);
+refs.replacementImageInput.addEventListener("cancel", () => {
+  showImageReplacementStatus("未选择图片，原图片保持不变。");
 });
 refs.undo.addEventListener("click", undo);
 refs.redo.addEventListener("click", redo);
@@ -658,6 +685,10 @@ function applyEdits(doc) {
     if (typeof edit.html === "string") element.innerHTML = edit.html;
     else if (typeof edit.text === "string") element.textContent = edit.text;
     applyTextStyleEdit(element, edit.styles);
+    if (element.matches("img") && typeof edit.imageDataUrl === "string") {
+      element.setAttribute("src", edit.imageDataUrl);
+      element.removeAttribute("srcset");
+    }
   });
 }
 
@@ -775,10 +806,23 @@ function selectObject(element) {
     refs.textContent.value = state.pendingText;
     populateTextStyleFields(element);
     refs.textProperties.hidden = false;
+    refs.imageProperties.hidden = true;
     refs.objectProperties.hidden = true;
+    refs.imageProperties.setAttribute("aria-label", "当前图片");
+    refs.objectProperties.setAttribute("aria-label", "当前对象");
+  } else if (object.kind === "image") {
+    refs.textProperties.hidden = true;
+    refs.imageProperties.hidden = false;
+    refs.objectProperties.hidden = true;
+    refs.imageProperties.setAttribute("aria-label", "当前对象 · 当前图片");
+    refs.objectProperties.setAttribute("aria-label", "其他对象");
+    updateImageProperties();
   } else {
     refs.textProperties.hidden = true;
+    refs.imageProperties.hidden = true;
     refs.objectProperties.hidden = false;
+    refs.imageProperties.setAttribute("aria-label", "当前图片");
+    refs.objectProperties.setAttribute("aria-label", "当前对象");
     refs.objectSummary.querySelector("strong").textContent = objectTypeLabel(object);
     refs.objectSummary.querySelector("span").textContent = object.statusLabel;
     refs.objectMessage.textContent = object.message;
@@ -796,10 +840,14 @@ function clearSelection() {
   state.selectedId = null;
   refs.propertiesEmpty.hidden = false;
   refs.textProperties.hidden = true;
+  refs.imageProperties.hidden = true;
   refs.objectProperties.hidden = true;
   refs.selectionActions.hidden = true;
   refs.placeholders.hidden = false;
   refs.selectionBadge.textContent = "未选择对象";
+  refs.imageProperties.setAttribute("aria-label", "当前图片");
+  refs.objectProperties.setAttribute("aria-label", "当前对象");
+  hideImageReplacementStatus();
   refs.statusPath.textContent = "未选择对象";
   document.querySelector(".selection-overlay")?.remove();
   refs.hierarchyTree.querySelectorAll('[aria-selected="true"]').forEach((row) => row.setAttribute("aria-selected", "false"));
@@ -811,6 +859,97 @@ function previewTextChange() {
   state.selectedElement.textContent = state.pendingText;
   refreshObjectLabels();
   syncSelectionSurfaces();
+}
+
+function updateImageProperties() {
+  if (!state.selectedElement?.matches("img") || !state.selectedId) return;
+  const rect = state.selectedElement.getBoundingClientRect();
+  const edit = state.edits[state.selectedId];
+  const source = state.selectedElement.getAttribute("src") || "未设置来源";
+  refs.imageAlt.textContent = state.selectedElement.getAttribute("alt") || "无替代文字";
+  refs.imageSize.textContent = `${Math.round(rect.width)} × ${Math.round(rect.height)}`;
+  refs.imageSource.textContent = edit?.imageName || describeImageSource(source);
+}
+
+function describeImageSource(source) {
+  if (/^data:/i.test(source)) return "原文档内嵌图片";
+  if (isExternalUrl(source)) return "外部图片 URL";
+  return source || "未设置来源";
+}
+
+async function replaceSelectedImage(event) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) {
+    showImageReplacementStatus("未选择图片，原图片保持不变。");
+    return;
+  }
+  if (!state.selectedElement?.matches("img") || !state.selectedId) {
+    showImageReplacementStatus("当前没有可替换的图片对象。");
+    return;
+  }
+
+  const selectedId = state.selectedId;
+  const selectedElement = state.selectedElement;
+  try {
+    if (!file.type.startsWith("image/")) throw new Error("unsupported-type");
+    const imageDataUrl = await readFileAsDataUrl(file);
+    await validateImageData(imageDataUrl);
+    if (state.selectedId !== selectedId || state.selectedElement !== selectedElement) {
+      throw new Error("selection-changed");
+    }
+
+    const before = structuredClone(state.edits);
+    state.edits[selectedId] = {
+      ...state.edits[selectedId],
+      imageDataUrl,
+      imageName: file.name,
+    };
+    selectedElement.setAttribute("src", imageDataUrl);
+    selectedElement.removeAttribute("srcset");
+    recordEditHistory(before);
+    hideImageReplacementStatus();
+    updateImageProperties();
+    syncSelectionSurfaces();
+  } catch (error) {
+    console.error("Unable to replace the selected image", error);
+    const message = error?.message === "selection-changed"
+      ? "读取图片时选择目标已改变，原图片保持不变。"
+      : "无法读取或不支持这个图片文件，原图片保持不变。";
+    showImageReplacementStatus(message);
+  }
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(reader.result), { once: true });
+    reader.addEventListener("error", () => reject(reader.error || new Error("read-failed")), { once: true });
+    reader.addEventListener("abort", () => reject(new Error("read-aborted")), { once: true });
+    reader.readAsDataURL(file);
+  });
+}
+
+function validateImageData(source) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.addEventListener("load", () => {
+      if (image.naturalWidth > 0 && image.naturalHeight > 0) resolve();
+      else reject(new Error("invalid-image"));
+    }, { once: true });
+    image.addEventListener("error", () => reject(new Error("invalid-image")), { once: true });
+    image.src = source;
+  });
+}
+
+function showImageReplacementStatus(message) {
+  refs.imageReplacementStatus.textContent = message;
+  refs.imageReplacementStatus.hidden = false;
+}
+
+function hideImageReplacementStatus() {
+  refs.imageReplacementStatus.hidden = true;
+  refs.imageReplacementStatus.textContent = "";
 }
 
 function discoverObjects(frameDocument) {
@@ -1156,13 +1295,18 @@ function commitTextHtml(html) {
 
 function commitEditSnapshot(before) {
   if (JSON.stringify(before) === JSON.stringify(state.edits)) return;
+  recordEditHistory(before);
+  refreshObjectLabels();
+}
+
+function recordEditHistory(before) {
+  if (JSON.stringify(before) === JSON.stringify(state.edits)) return;
   state.history.splice(state.historyIndex + 1);
   state.history.push({ before, after: structuredClone(state.edits) });
   state.historyIndex = state.history.length - 1;
   saveProject();
   syncHistoryButtons();
   refs.documentStatus.textContent = "已保存到浏览器";
-  refreshObjectLabels();
 }
 
 function undo() {
@@ -1202,6 +1346,20 @@ function syncLoadedWorkingCopy() {
     for (const property of Object.keys(edit?.styles || {})) element.style.removeProperty(property);
     if (originalElement) element.setAttribute("style", originalElement.getAttribute("style") || "");
     applyTextStyleEdit(element, edit?.styles);
+  });
+  currentDocument.querySelectorAll(IMAGE_OBJECT_SELECTOR).forEach((element) => {
+    const id = element.dataset.htmlEditorId;
+    const originalElement = originalDocument.querySelector(
+      `[data-html-editor-id="${CSS.escape(id)}"]`,
+    );
+    const source = state.edits[id]?.imageDataUrl ?? originalElement?.getAttribute("src");
+    if (typeof source === "string") element.setAttribute("src", source);
+    if (state.edits[id]?.imageDataUrl) element.removeAttribute("srcset");
+    else if (originalElement?.hasAttribute("srcset")) {
+      element.setAttribute("srcset", originalElement.getAttribute("srcset"));
+    } else {
+      element.removeAttribute("srcset");
+    }
   });
   discoverObjects(currentDocument);
   renderHierarchyTree();
