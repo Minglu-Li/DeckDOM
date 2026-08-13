@@ -604,6 +604,12 @@ async function waitForWorkingCopyDocument(frame, importToken) {
 
 function buildWorkingCopyHtml(importToken) {
   const doc = new DOMParser().parseFromString(state.originalHtml, "text/html");
+  if (!doc.head.querySelector("base")) {
+    const base = doc.createElement("base");
+    base.href = "about:srcdoc";
+    base.dataset.htmlEditorAssist = "true";
+    doc.head.prepend(base);
+  }
   const token = doc.createElement("meta");
   token.name = "html-editor-import-token";
   token.content = importToken;
@@ -614,7 +620,14 @@ function buildWorkingCopyHtml(importToken) {
   assistStyle.dataset.htmlEditorAssist = "true";
   assistStyle.textContent = `
     html[data-html-editor-mode="edit"] [data-html-editor-id] { cursor: default !important; }
-    [data-html-editor-selected="true"] {
+    html[data-html-editor-mode="edit"] *,
+    html[data-html-editor-mode="edit"] *::before,
+    html[data-html-editor-mode="edit"] *::after {
+      animation-play-state: paused !important;
+      transition-duration: 0s !important;
+      transition-delay: 0s !important;
+    }
+    html[data-html-editor-mode="edit"] [data-html-editor-selected="true"] {
       outline: 3px solid #2f5bff !important;
       outline-offset: 3px !important;
     }
@@ -747,9 +760,11 @@ function installEditingBoundary(frame) {
   const frameDocument = frame.contentDocument;
   if (!frameDocument) return;
 
+  removeEditingBoundary(frame);
   if (state.mode === "edit") {
     frameDocument.documentElement.dataset.htmlEditorMode = "edit";
     frameDocument.addEventListener("click", handleWorkingCopyClick, true);
+    frameDocument.addEventListener("keydown", handleWorkingCopyKeydown, true);
     frameDocument.addEventListener("transitionend", syncSelectionSurfaces, true);
     frameDocument.addEventListener("animationend", syncSelectionSurfaces, true);
     frameDocument.addEventListener("dblclick", handleWorkingCopyDoubleClick, true);
@@ -760,13 +775,46 @@ function installEditingBoundary(frame) {
   }
 }
 
+function removeEditingBoundary(frame) {
+  const frameDocument = frame.contentDocument;
+  if (!frameDocument) return;
+  frameDocument.removeEventListener("click", handleWorkingCopyClick, true);
+  frameDocument.removeEventListener("keydown", handleWorkingCopyKeydown, true);
+  frameDocument.removeEventListener("transitionend", syncSelectionSurfaces, true);
+  frameDocument.removeEventListener("animationend", syncSelectionSurfaces, true);
+  frameDocument.removeEventListener("dblclick", handleWorkingCopyDoubleClick, true);
+  frame.contentWindow?.removeEventListener("scroll", syncSelectionSurfaces);
+  state.observer?.disconnect();
+}
+
 function handleWorkingCopyClick(event) {
   if (state.mode !== "edit") return;
   const target = event.target?.closest?.("[data-html-editor-id]") || null;
-  if (!target) return;
   event.preventDefault();
   event.stopImmediatePropagation();
-  selectObject(target);
+  if (target) selectObject(target);
+}
+
+function handleWorkingCopyKeydown(event) {
+  if (state.mode !== "edit") return;
+  const shortcut = event.ctrlKey || event.metaKey;
+  const key = event.key.toLowerCase();
+  if (shortcut && key === "z") {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (event.shiftKey) redo();
+    else undo();
+    return;
+  }
+  if (shortcut && key === "y") {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    redo();
+    return;
+  }
+  if (event.target?.closest?.('[contenteditable="true"]')) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
 }
 
 function handleWorkingCopyDoubleClick(event) {
@@ -797,6 +845,7 @@ function beginInlineTextEditing(element) {
 }
 
 function handleInlineEditingKeydown(event) {
+  event.stopPropagation();
   if (event.key !== "Escape") return;
   event.preventDefault();
   finishInlineTextEditing();
@@ -1607,7 +1656,12 @@ async function setMode(mode) {
   refs.editMode.setAttribute("aria-pressed", String(mode === "edit"));
   refs.previewMode.setAttribute("aria-pressed", String(mode === "preview"));
   clearSelection();
-  await loadWorkingCopy();
+  const frame = document.querySelector(".working-copy-frame");
+  if (frame) installEditingBoundary(frame);
+  refs.workingCopyTitle.textContent = mode === "edit" ? "编辑模式" : "预览模式";
+  document.querySelector(".editor-workspace").classList.toggle("is-preview-mode", mode === "preview");
+  refs.hierarchyTree.inert = mode === "preview";
+  document.querySelector(".properties-panel").inert = mode === "preview";
   saveProject();
 }
 
@@ -1684,6 +1738,9 @@ function updateProjectChrome(frame) {
   setViewportControlsDisabled(false);
   refs.editMode.setAttribute("aria-pressed", String(state.mode === "edit"));
   refs.previewMode.setAttribute("aria-pressed", String(state.mode === "preview"));
+  document.querySelector(".editor-workspace").classList.toggle("is-preview-mode", state.mode === "preview");
+  refs.hierarchyTree.inert = state.mode === "preview";
+  document.querySelector(".properties-panel").inert = state.mode === "preview";
   updateResourceStatus();
   syncHistoryButtons();
 }
