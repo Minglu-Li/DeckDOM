@@ -68,12 +68,22 @@ app.innerHTML = `
           <p><span>工作副本</span><strong id="working-copy-title">尚未载入</strong></p>
         </div>
         <div class="viewport-tools" aria-label="参考视口与缩放">
-          <label>参考视口</label>
-          <button type="button" disabled>1440 × 900 <span aria-hidden="true">⌄</span></button>
+          <span class="viewport-label">参考视口</span>
+          <label class="viewport-dimension">
+            <span class="visually-hidden">参考视口宽度</span>
+            <input type="number" inputmode="numeric" aria-label="参考视口宽度" value="1440" disabled>
+          </label>
+          <span aria-hidden="true">×</span>
+          <label class="viewport-dimension">
+            <span class="visually-hidden">参考视口高度</span>
+            <input type="number" inputmode="numeric" aria-label="参考视口高度" value="900" disabled>
+          </label>
+          <button type="button" data-apply-viewport disabled>应用参考视口</button>
           <span class="canvas-toolbar-rule" aria-hidden="true"></span>
-          <button class="zoom-button" type="button" aria-label="缩小" disabled>−</button>
-          <output>64%</output>
-          <button class="zoom-button" type="button" aria-label="放大" disabled>+</button>
+          <button class="zoom-button" type="button" aria-label="缩小" data-zoom-out disabled>−</button>
+          <output aria-label="画布显示缩放">64%</output>
+          <button class="zoom-button" type="button" aria-label="放大" data-zoom-in disabled>+</button>
+          <button type="button" data-fit-canvas disabled>适合画布</button>
         </div>
       </div>
 
@@ -153,7 +163,8 @@ app.innerHTML = `
     <footer class="statusbar" aria-label="编辑器状态">
       <div class="status-path"><span>路径</span><strong aria-label="对象路径">未选择对象</strong></div>
       <div class="status-items">
-        <span><i class="status-dot status-dot-idle"></i>等待文档</span>
+        <span class="viewport-guarantee">修改只保证当前参考视口下的预期结果</span>
+        <span data-status-document><i class="status-dot status-dot-idle"></i>等待文档</span>
         <span data-resource-summary><i class="status-dot status-dot-clear"></i>资源 0</span>
         <span><i class="status-dot status-dot-supported"></i>桌面 Chromium</span>
         <span class="status-local"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 10V8a5 5 0 0 1 10 0v2m-11 0h12v10H6V10Z"/></svg>本地处理</span>
@@ -198,6 +209,10 @@ const state = {
   nextObjectId: 1,
   observer: null,
   resources: [],
+  viewportWidth: 1440,
+  viewportHeight: 900,
+  canvasZoom: 0.64,
+  fitCanvasActive: false,
 };
 
 const refs = {
@@ -231,7 +246,7 @@ const refs = {
   previewMode: document.querySelector("[data-preview-mode]"),
   exportButton: document.querySelector("[data-export]"),
   statusPath: document.querySelector(".status-path strong"),
-  statusDocument: document.querySelector(".status-items > span:first-child"),
+  statusDocument: document.querySelector("[data-status-document]"),
   statusResources: document.querySelector("[data-resource-summary]"),
   importDiagnostic: document.querySelector(".import-diagnostic"),
   importDiagnosticMessage: document.querySelector(".import-diagnostic-message"),
@@ -239,6 +254,15 @@ const refs = {
   resourceStatusSummary: document.querySelector(".resource-status-summary"),
   resourceList: document.querySelector(".resource-status ul"),
   lockedContentStatus: document.querySelector(".locked-content-status"),
+  viewportWidth: document.querySelector('[aria-label="参考视口宽度"]'),
+  viewportHeight: document.querySelector('[aria-label="参考视口高度"]'),
+  applyViewport: document.querySelector("[data-apply-viewport]"),
+  zoomOut: document.querySelector("[data-zoom-out]"),
+  zoomIn: document.querySelector("[data-zoom-in]"),
+  zoomOutput: document.querySelector('[aria-label="画布显示缩放"]'),
+  fitCanvas: document.querySelector("[data-fit-canvas]"),
+  coordinateX: document.querySelector(".canvas-coordinate-x"),
+  coordinateY: document.querySelector(".canvas-coordinate-y"),
 };
 
 document.querySelectorAll("[data-open-html]").forEach((button) => {
@@ -264,6 +288,16 @@ refs.editMode.addEventListener("click", () => setMode("edit"));
 refs.previewMode.addEventListener("click", () => setMode("preview"));
 refs.exportButton.addEventListener("click", exportHtml);
 refs.selectParent.addEventListener("click", selectParentContainer);
+refs.applyViewport.addEventListener("click", applyReferenceViewport);
+refs.zoomOut.addEventListener("click", () => changeCanvasZoom(-0.1));
+refs.zoomIn.addEventListener("click", () => changeCanvasZoom(0.1));
+refs.fitCanvas.addEventListener("click", fitCanvasToStage);
+
+const stageResizeObserver = new ResizeObserver(() => {
+  if (state.fitCanvasActive && state.originalHtml) fitCanvasToStage();
+  else syncSelectionSurfaces();
+});
+stageResizeObserver.observe(refs.canvasStage);
 
 restoreRecentProject();
 
@@ -294,6 +328,10 @@ async function importSelectedFile(event) {
     state.nextObjectId = 1;
     state.restored = false;
     state.resources = inspectDeclaredResources(html);
+    state.viewportWidth = 1440;
+    state.viewportHeight = 900;
+    state.canvasZoom = 0.64;
+    state.fitCanvasActive = false;
     try {
       await loadWorkingCopy();
       saveProject();
@@ -325,6 +363,10 @@ function captureProjectState() {
     mode: state.mode,
     restored: state.restored,
     resources: structuredClone(state.resources),
+    viewportWidth: state.viewportWidth,
+    viewportHeight: state.viewportHeight,
+    canvasZoom: state.canvasZoom,
+    fitCanvasActive: state.fitCanvasActive,
   };
 }
 
@@ -356,6 +398,73 @@ function resetEmptyWorkspace() {
   refs.editMode.disabled = true;
   refs.previewMode.disabled = true;
   refs.exportButton.disabled = true;
+  setViewportControlsDisabled(true);
+}
+
+function setViewportControlsDisabled(disabled) {
+  [
+    refs.viewportWidth,
+    refs.viewportHeight,
+    refs.applyViewport,
+    refs.zoomOut,
+    refs.zoomIn,
+    refs.fitCanvas,
+  ].forEach((control) => {
+    control.disabled = disabled;
+  });
+}
+
+function applyReferenceViewport() {
+  const width = Number(refs.viewportWidth.value);
+  const height = Number(refs.viewportHeight.value);
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {
+    refs.documentStatus.textContent = "请输入有效的参考视口尺寸";
+    return;
+  }
+  state.viewportWidth = width;
+  state.viewportHeight = height;
+  applyViewportPresentation();
+  if (state.fitCanvasActive) fitCanvasToStage();
+  saveProject();
+}
+
+function changeCanvasZoom(delta) {
+  state.fitCanvasActive = false;
+  state.canvasZoom = Math.min(1.5, Math.max(0.2, Math.round((state.canvasZoom + delta) * 100) / 100));
+  applyViewportPresentation();
+  saveProject();
+}
+
+function fitCanvasToStage() {
+  if (!state.originalHtml) return;
+  const availableWidth = Math.max(1, refs.canvasStage.clientWidth - 56);
+  const availableHeight = Math.max(1, refs.canvasStage.clientHeight - 56);
+  state.fitCanvasActive = true;
+  state.canvasZoom = Math.min(
+    1,
+    Math.max(0.2, Math.floor(Math.min(
+      availableWidth / state.viewportWidth,
+      availableHeight / state.viewportHeight,
+    ) * 100) / 100),
+  );
+  applyViewportPresentation();
+  saveProject();
+}
+
+function applyViewportPresentation(frame = document.querySelector(".working-copy-frame")) {
+  refs.viewportWidth.value = String(state.viewportWidth);
+  refs.viewportHeight.value = String(state.viewportHeight);
+  refs.zoomOutput.value = `${Math.round(state.canvasZoom * 100)}%`;
+  refs.zoomOutput.textContent = refs.zoomOutput.value;
+  refs.coordinateX.textContent = String(state.viewportWidth);
+  refs.coordinateY.textContent = String(state.viewportHeight);
+  if (!frame) return;
+  frame.setAttribute("width", String(state.viewportWidth));
+  frame.setAttribute("height", String(state.viewportHeight));
+  frame.style.width = `${state.viewportWidth}px`;
+  frame.style.height = `${state.viewportHeight}px`;
+  frame.style.setProperty("--canvas-zoom", String(state.canvasZoom));
+  requestAnimationFrame(syncSelectionSurfaces);
 }
 
 async function loadWorkingCopy() {
@@ -369,6 +478,7 @@ async function loadWorkingCopy() {
     frame.title = "HTML 工作副本";
     refs.canvasStage.append(frame);
   }
+  applyViewportPresentation(frame);
 
   const importToken = crypto.randomUUID();
   frame.srcdoc = buildWorkingCopyHtml(importToken);
@@ -512,6 +622,8 @@ function installEditingBoundary(frame) {
   if (state.mode === "edit") {
     frameDocument.documentElement.dataset.htmlEditorMode = "edit";
     frameDocument.addEventListener("click", handleWorkingCopyClick, true);
+    frameDocument.addEventListener("transitionend", syncSelectionSurfaces, true);
+    frameDocument.addEventListener("animationend", syncSelectionSurfaces, true);
     frame.contentWindow.addEventListener("scroll", syncSelectionSurfaces, { passive: true });
     observeWorkingCopy(frameDocument);
   } else {
@@ -639,7 +751,13 @@ function observeWorkingCopy(frameDocument) {
       renderHierarchyTree();
     });
   });
-  state.observer.observe(frameDocument.body, { childList: true, characterData: true, subtree: true });
+  state.observer.observe(frameDocument.body, {
+    attributes: true,
+    attributeFilter: ["class", "style", "hidden", "open"],
+    childList: true,
+    characterData: true,
+    subtree: true,
+  });
 }
 
 function assignLiveEditorIds(frameDocument) {
@@ -769,8 +887,9 @@ function renderSelectionOverlay(element, object) {
   const elementRect = element.getBoundingClientRect();
   const scaleX = frameRect.width / frame.offsetWidth;
   const scaleY = frameRect.height / frame.offsetHeight;
-  overlay.style.left = `${frameRect.left - refs.canvasStage.getBoundingClientRect().left + elementRect.left * scaleX}px`;
-  overlay.style.top = `${frameRect.top - refs.canvasStage.getBoundingClientRect().top + elementRect.top * scaleY}px`;
+  const stageRect = refs.canvasStage.getBoundingClientRect();
+  overlay.style.left = `${frameRect.left - stageRect.left + elementRect.left * scaleX}px`;
+  overlay.style.top = `${frameRect.top - stageRect.top + elementRect.top * scaleY}px`;
   overlay.style.width = `${Math.max(3, elementRect.width * scaleX)}px`;
   overlay.style.height = `${Math.max(3, elementRect.height * scaleY)}px`;
   overlay.textContent = `${object.tag} · ${object.statusLabel}`;
@@ -859,6 +978,10 @@ function saveProject() {
     history: state.history,
     historyIndex: state.historyIndex,
     mode: state.mode,
+    viewportWidth: state.viewportWidth,
+    viewportHeight: state.viewportHeight,
+    canvasZoom: state.canvasZoom,
+    fitCanvasActive: state.fitCanvasActive,
   };
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
@@ -884,6 +1007,16 @@ function restoreRecentProject() {
   state.history = project.history || [];
   state.historyIndex = Number.isInteger(project.historyIndex) ? project.historyIndex : -1;
   state.mode = project.mode === "preview" ? "preview" : "edit";
+  state.viewportWidth = Number.isInteger(project.viewportWidth) && project.viewportWidth > 0
+    ? project.viewportWidth
+    : 1440;
+  state.viewportHeight = Number.isInteger(project.viewportHeight) && project.viewportHeight > 0
+    ? project.viewportHeight
+    : 900;
+  state.canvasZoom = typeof project.canvasZoom === "number"
+    ? Math.min(1.5, Math.max(0.2, project.canvasZoom))
+    : 0.64;
+  state.fitCanvasActive = project.fitCanvasActive === true;
   state.restored = true;
   state.resources = inspectDeclaredResources(project.originalHtml);
   loadWorkingCopy();
@@ -907,6 +1040,7 @@ function updateProjectChrome(frame) {
   refs.editMode.disabled = false;
   refs.previewMode.disabled = false;
   refs.exportButton.disabled = false;
+  setViewportControlsDisabled(false);
   refs.editMode.setAttribute("aria-pressed", String(state.mode === "edit"));
   refs.previewMode.setAttribute("aria-pressed", String(state.mode === "preview"));
   updateResourceStatus();
