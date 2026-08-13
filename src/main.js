@@ -177,6 +177,18 @@ app.innerHTML = `
         <div class="object-summary"><strong></strong><span></span></div>
         <p class="object-message"></p>
       </section>
+      <section class="appearance-properties" aria-label="外观覆盖" hidden>
+        <fieldset class="appearance-fields">
+          <legend>当前对象外观</legend>
+          <label>背景色<input name="backgroundColor" type="color"></label>
+          <label>边框颜色<input name="borderColor" type="color"></label>
+          <label>边框样式<select name="borderStyle"><option value="none">无</option><option value="solid">实线</option><option value="dashed">虚线</option><option value="dotted">点线</option><option value="double">双线</option></select></label>
+          <label>边框宽度<input name="borderWidth" type="number" min="0" step="1"><span>px</span></label>
+          <label>圆角<input name="borderRadius" type="number" min="0" step="1"><span>px</span></label>
+        </fieldset>
+        <p>外观只覆盖当前对象，不会改写共享 CSS 或后代对象。</p>
+        <button class="button apply-appearance-button" type="button">保存外观</button>
+      </section>
       <div class="selection-actions" hidden>
         <button class="button select-parent-button" type="button">选择父容器</button>
       </div>
@@ -230,6 +242,13 @@ const IMAGE_OBJECT_SELECTOR = "img";
 const CONTAINER_OBJECT_SELECTOR = "section,article,nav,header,footer,main,aside,div,ul,ol,table,tbody,thead,tr";
 const COMPLEX_OBJECT_SELECTOR = "svg,canvas,video,audio,iframe,object,embed";
 const DISCOVERABLE_SELECTOR = `${TEXT_OBJECT_SELECTOR},${IMAGE_OBJECT_SELECTOR},${CONTAINER_OBJECT_SELECTOR},${COMPLEX_OBJECT_SELECTOR}`;
+const APPEARANCE_PROPERTIES = [
+  "backgroundColor",
+  "borderColor",
+  "borderStyle",
+  "borderWidth",
+  "borderRadius",
+];
 
 const state = {
   sourceName: "",
@@ -241,6 +260,9 @@ const state = {
   selectedElement: null,
   pendingText: "",
   pendingTextStyles: {},
+  pendingAppearance: {},
+  appearancePreviewBaseline: null,
+  appearancePreviewDirty: false,
   mode: "edit",
   restored: false,
   inlineEditingElement: null,
@@ -288,6 +310,9 @@ const refs = {
   objectProperties: document.querySelector(".object-properties"),
   objectSummary: document.querySelector(".object-properties .object-summary"),
   objectMessage: document.querySelector(".object-message"),
+  appearanceProperties: document.querySelector(".appearance-properties"),
+  appearanceFields: document.querySelector(".appearance-fields"),
+  applyAppearance: document.querySelector(".apply-appearance-button"),
   selectionActions: document.querySelector(".selection-actions"),
   selectParent: document.querySelector(".select-parent-button"),
   selectionBadge: document.querySelector(".selection-badge"),
@@ -352,6 +377,9 @@ refs.replacementImageInput.addEventListener("change", replaceSelectedImage);
 refs.replacementImageInput.addEventListener("cancel", () => {
   showImageReplacementStatus("未选择图片，原图片保持不变。");
 });
+refs.appearanceFields.addEventListener("input", previewAppearance);
+refs.appearanceFields.addEventListener("change", previewAppearance);
+refs.applyAppearance.addEventListener("click", commitAppearance);
 refs.undo.addEventListener("click", undo);
 refs.redo.addEventListener("click", redo);
 refs.editMode.addEventListener("click", () => setMode("edit"));
@@ -685,6 +713,7 @@ function applyEdits(doc) {
     if (typeof edit.html === "string") element.innerHTML = edit.html;
     else if (typeof edit.text === "string") element.textContent = edit.text;
     applyTextStyleEdit(element, edit.styles);
+    applyAppearanceEdit(element, edit.appearance);
     if (element.matches("img") && typeof edit.imageDataUrl === "string") {
       element.setAttribute("src", edit.imageDataUrl);
       element.removeAttribute("srcset");
@@ -800,6 +829,8 @@ function selectObject(element) {
   refs.selectionActions.hidden = false;
   const object = objectForElement(element);
   if (!object) return;
+  const supportsAppearance = object.status === "editable"
+    && ["text", "image", "container"].includes(object.kind);
 
   if (object.kind === "text") {
     state.pendingText = element.textContent;
@@ -827,12 +858,15 @@ function selectObject(element) {
     refs.objectSummary.querySelector("span").textContent = object.statusLabel;
     refs.objectMessage.textContent = object.message;
   }
+  refs.appearanceProperties.hidden = !supportsAppearance;
+  if (supportsAppearance) populateAppearanceFields(element);
   refs.selectionBadge.textContent = `${object.tag} · ${objectTypeLabel(object)}`;
   syncSelectionSurfaces();
 }
 
 function clearSelection() {
   if (state.inlineEditingElement) finishInlineTextEditing();
+  restoreAppearancePreview();
   if (state.selectedElement?.isConnected) {
     delete state.selectedElement.dataset.htmlEditorSelected;
   }
@@ -842,6 +876,7 @@ function clearSelection() {
   refs.textProperties.hidden = true;
   refs.imageProperties.hidden = true;
   refs.objectProperties.hidden = true;
+  refs.appearanceProperties.hidden = true;
   refs.selectionActions.hidden = true;
   refs.placeholders.hidden = false;
   refs.selectionBadge.textContent = "未选择对象";
@@ -1223,6 +1258,73 @@ function applyTextStyleEdit(element, styles = {}) {
   });
 }
 
+function appearanceControls() {
+  return [...refs.appearanceFields.elements].filter((control) => control.name);
+}
+
+function populateAppearanceFields(element) {
+  const computed = element.ownerDocument.defaultView.getComputedStyle(element);
+  const values = {
+    backgroundColor: rgbToHex(computed.backgroundColor),
+    borderColor: rgbToHex(computed.borderColor),
+    borderStyle: computed.borderStyle,
+    borderWidth: parseFloat(computed.borderWidth) || 0,
+    borderRadius: parseFloat(computed.borderRadius) || 0,
+  };
+  appearanceControls().forEach((control) => {
+    control.value = String(values[control.name] ?? "");
+  });
+  state.pendingAppearance = { ...(state.edits[state.selectedId]?.appearance || {}) };
+  state.appearancePreviewBaseline = Object.fromEntries(
+    APPEARANCE_PROPERTIES.map((property) => [property, element.style[property]]),
+  );
+  state.appearancePreviewDirty = false;
+}
+
+function normalizeAppearanceValue(property, value) {
+  return property === "borderWidth" || property === "borderRadius" ? `${value || 0}px` : value;
+}
+
+function applyAppearanceEdit(element, appearance = {}) {
+  Object.entries(appearance || {}).forEach(([property, value]) => {
+    if (!APPEARANCE_PROPERTIES.includes(property)) return;
+    element.style[property] = value;
+  });
+}
+
+function previewAppearance(event) {
+  if (!state.selectedElement || !APPEARANCE_PROPERTIES.includes(event.target.name)) return;
+  const value = normalizeAppearanceValue(event.target.name, event.target.value.trim());
+  state.pendingAppearance[event.target.name] = value;
+  state.selectedElement.style[event.target.name] = value;
+  state.appearancePreviewDirty = true;
+  syncSelectionSurfaces();
+}
+
+function commitAppearance() {
+  if (!state.selectedElement || !state.selectedId) return;
+  const before = structuredClone(state.edits);
+  const nextEdit = { ...(state.edits[state.selectedId] || {}) };
+  nextEdit.appearance = { ...state.pendingAppearance };
+  if (Object.keys(nextEdit.appearance).length === 0) delete nextEdit.appearance;
+  if (Object.keys(nextEdit).length) state.edits[state.selectedId] = nextEdit;
+  else delete state.edits[state.selectedId];
+  state.appearancePreviewBaseline = Object.fromEntries(
+    APPEARANCE_PROPERTIES.map((property) => [property, state.selectedElement.style[property]]),
+  );
+  state.appearancePreviewDirty = false;
+  commitEditSnapshot(before);
+}
+
+function restoreAppearancePreview() {
+  if (state.appearancePreviewDirty && state.selectedElement?.isConnected && state.appearancePreviewBaseline) {
+    applyAppearanceEdit(state.selectedElement, state.appearancePreviewBaseline);
+  }
+  state.pendingAppearance = {};
+  state.appearancePreviewBaseline = null;
+  state.appearancePreviewDirty = false;
+}
+
 function previewTextStyles() {
   if (!state.selectedElement) return;
   state.pendingTextStyles = readTextStyleControls();
@@ -1334,6 +1436,19 @@ function syncLoadedWorkingCopy() {
   const originalDocument = new DOMParser().parseFromString(state.originalHtml, "text/html");
   assignEditorIds(originalDocument);
 
+  currentDocument.querySelectorAll("[data-html-editor-id]").forEach((element) => {
+    const id = element.dataset.htmlEditorId;
+    const originalElement = originalDocument.querySelector(
+      `[data-html-editor-id="${CSS.escape(id)}"]`,
+    );
+    if (originalElement?.hasAttribute("style")) {
+      element.setAttribute("style", originalElement.getAttribute("style"));
+    } else {
+      element.removeAttribute("style");
+    }
+    applyAppearanceEdit(element, state.edits[id]?.appearance);
+  });
+
   currentDocument.querySelectorAll(TEXT_OBJECT_SELECTOR).forEach((element) => {
     const id = element.dataset.htmlEditorId;
     const originalElement = originalDocument.querySelector(
@@ -1343,8 +1458,6 @@ function syncLoadedWorkingCopy() {
     if (typeof edit?.html === "string") element.innerHTML = edit.html;
     else if (typeof edit?.text === "string") element.textContent = edit.text;
     else if (originalElement) element.innerHTML = originalElement.innerHTML;
-    for (const property of Object.keys(edit?.styles || {})) element.style.removeProperty(property);
-    if (originalElement) element.setAttribute("style", originalElement.getAttribute("style") || "");
     applyTextStyleEdit(element, edit?.styles);
   });
   currentDocument.querySelectorAll(IMAGE_OBJECT_SELECTOR).forEach((element) => {
