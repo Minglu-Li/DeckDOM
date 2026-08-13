@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
+import { TEST_SERVER_ORIGIN } from "./test-server.js";
 
 const acceptanceFixture = fileURLToPath(
   new URL("../../testexample/test2.html", import.meta.url),
@@ -78,6 +79,6 @@ test("user can edit one text object, recover it, preview it, and export a standa
   await expect(deliverable.getByText("对象属性", { exact: true })).toHaveCount(0);
 
   const untouchedOriginal = await context.newPage();
-  await untouchedOriginal.goto("http://127.0.0.1:4391/testexample/test2.html");
+  await untouchedOriginal.goto(`${TEST_SERVER_ORIGIN}/testexample/test2.html`);
   await expect(untouchedOriginal.getByRole("heading", { name: "iPhone", exact: true })).toBeVisible();
 });

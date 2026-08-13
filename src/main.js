@@ -56,6 +56,7 @@ app.innerHTML = `
         <span aria-hidden="true">&lt;/&gt;</span>
         <p>打开 HTML 后，这里会显示页面原有层级。</p>
       </div>
+      <div class="hierarchy-tree" role="tree" aria-label="HTML 层级树" hidden></div>
     </aside>
 
     <main class="working-copy-panel" aria-labelledby="working-copy-title">
@@ -111,18 +112,26 @@ app.innerHTML = `
         <p>载入文档后，单击文字、图片或普通容器即可查看相关属性。</p>
       </div>
       <section class="text-properties" aria-label="当前选择" hidden>
+        <div class="object-summary"><strong>文字对象</strong><span>可编辑</span></div>
         <label for="text-content">文字内容</label>
         <textarea id="text-content" rows="5"></textarea>
         <p>文字会立即呈现在真实工作副本中，应用后进入编辑历史。</p>
         <button class="button apply-text-button" type="button">应用文字</button>
       </section>
+      <section class="object-properties" aria-label="当前对象" hidden>
+        <div class="object-summary"><strong></strong><span></span></div>
+        <p class="object-message"></p>
+      </section>
+      <div class="selection-actions" hidden>
+        <button class="button select-parent-button" type="button">选择父容器</button>
+      </div>
       <div class="property-placeholders" aria-hidden="true">
         <span></span><span></span><span></span>
       </div>
     </aside>
 
     <footer class="statusbar" aria-label="编辑器状态">
-      <div class="status-path"><span>路径</span><strong>未选择对象</strong></div>
+      <div class="status-path"><span>路径</span><strong aria-label="对象路径">未选择对象</strong></div>
       <div class="status-items">
         <span><i class="status-dot status-dot-idle"></i>等待文档</span>
         <span><i class="status-dot status-dot-clear"></i>资源 0</span>
@@ -149,6 +158,10 @@ app.innerHTML = `
 
 const STORAGE_KEY = "html-visual-editor.recent-project.v1";
 const TEXT_OBJECT_SELECTOR = "h1,h2,h3,h4,h5,h6,p,a,button,li,td,th,pre,code,blockquote";
+const IMAGE_OBJECT_SELECTOR = "img";
+const CONTAINER_OBJECT_SELECTOR = "section,article,nav,header,footer,main,aside,div,ul,ol,table,tbody,thead,tr";
+const COMPLEX_OBJECT_SELECTOR = "svg,canvas,video,iframe,object,embed";
+const DISCOVERABLE_SELECTOR = `${TEXT_OBJECT_SELECTOR},${IMAGE_OBJECT_SELECTOR},${CONTAINER_OBJECT_SELECTOR},${COMPLEX_OBJECT_SELECTOR}`;
 
 const state = {
   sourceName: "",
@@ -161,6 +174,9 @@ const state = {
   pendingText: "",
   mode: "edit",
   restored: false,
+  objects: [],
+  nextObjectId: 1,
+  observer: null,
 };
 
 const refs = {
@@ -174,10 +190,18 @@ const refs = {
   workingCopyTitle: document.querySelector("#working-copy-title"),
   hierarchyCount: document.querySelector(".panel-meta span:last-child"),
   hierarchyEmpty: document.querySelector(".hierarchy-empty"),
+  hierarchyTree: document.querySelector(".hierarchy-tree"),
+  treeSearch: document.querySelector(".search-box input"),
   propertiesEmpty: document.querySelector(".properties-empty"),
   textProperties: document.querySelector(".text-properties"),
   textContent: document.querySelector("#text-content"),
+  textSummary: document.querySelector(".text-properties .object-summary"),
   applyText: document.querySelector(".apply-text-button"),
+  objectProperties: document.querySelector(".object-properties"),
+  objectSummary: document.querySelector(".object-properties .object-summary"),
+  objectMessage: document.querySelector(".object-message"),
+  selectionActions: document.querySelector(".selection-actions"),
+  selectParent: document.querySelector(".select-parent-button"),
   selectionBadge: document.querySelector(".selection-badge"),
   placeholders: document.querySelector(".property-placeholders"),
   undo: document.querySelector("[data-undo]"),
@@ -197,6 +221,7 @@ refs.trustConfirm.addEventListener("click", () => {
   refs.fileInput.click();
 });
 refs.fileInput.addEventListener("change", importSelectedFile);
+refs.treeSearch.addEventListener("input", renderHierarchyTree);
 refs.textContent.addEventListener("input", previewTextChange);
 refs.applyText.addEventListener("click", commitTextChange);
 refs.undo.addEventListener("click", undo);
@@ -204,6 +229,7 @@ refs.redo.addEventListener("click", redo);
 refs.editMode.addEventListener("click", () => setMode("edit"));
 refs.previewMode.addEventListener("click", () => setMode("preview"));
 refs.exportButton.addEventListener("click", exportHtml);
+refs.selectParent.addEventListener("click", selectParentContainer);
 
 restoreRecentProject();
 
@@ -217,6 +243,7 @@ async function importSelectedFile(event) {
   state.history = [];
   state.historyIndex = -1;
   state.selectedId = null;
+  state.nextObjectId = 1;
   state.restored = false;
   await loadWorkingCopy();
   saveProject();
@@ -239,12 +266,14 @@ async function loadWorkingCopy() {
   await waitForWorkingCopyDocument(frame);
 
   installEditingBoundary(frame);
+  discoverObjects(frame.contentDocument);
+  renderHierarchyTree();
   updateProjectChrome(frame);
 }
 
 async function waitForWorkingCopyDocument(frame) {
   for (let attempt = 0; attempt < 120; attempt += 1) {
-    if (frame.contentDocument?.body?.querySelector(TEXT_OBJECT_SELECTOR)) return;
+    if (frame.contentDocument?.body?.querySelector(DISCOVERABLE_SELECTOR)) return;
     await new Promise((resolve) => requestAnimationFrame(resolve));
   }
   throw new Error("The HTML working copy did not become ready.");
@@ -257,7 +286,7 @@ function buildWorkingCopyHtml() {
   const assistStyle = doc.createElement("style");
   assistStyle.dataset.htmlEditorAssist = "true";
   assistStyle.textContent = `
-    html[data-html-editor-mode="edit"] ${TEXT_OBJECT_SELECTOR} { cursor: default !important; }
+    html[data-html-editor-mode="edit"] [data-html-editor-id] { cursor: default !important; }
     [data-html-editor-selected="true"] {
       outline: 3px solid #2f5bff !important;
       outline-offset: 3px !important;
@@ -268,10 +297,13 @@ function buildWorkingCopyHtml() {
 }
 
 function assignEditorIds(doc) {
-  [...doc.querySelectorAll(TEXT_OBJECT_SELECTOR)].forEach((element, index) => {
-    if (!element.dataset.htmlEditorId) {
-      element.dataset.htmlEditorId = `text-${index + 1}`;
-    }
+  const usedIds = new Set();
+  [...doc.querySelectorAll(DISCOVERABLE_SELECTOR)].forEach((element, index) => {
+    let id = element.dataset.htmlEditorId;
+    if (!id || usedIds.has(id)) id = `object-${index + 1}`;
+    while (usedIds.has(id)) id = `object-${index + 1}-${usedIds.size + 1}`;
+    element.dataset.htmlEditorId = id;
+    usedIds.add(id);
   });
 }
 
@@ -289,6 +321,8 @@ function installEditingBoundary(frame) {
   if (state.mode === "edit") {
     frameDocument.documentElement.dataset.htmlEditorMode = "edit";
     frameDocument.addEventListener("click", handleWorkingCopyClick, true);
+    frame.contentWindow.addEventListener("scroll", syncSelectionSurfaces, { passive: true });
+    observeWorkingCopy(frameDocument);
   } else {
     frameDocument.documentElement.dataset.htmlEditorMode = "preview";
   }
@@ -296,25 +330,38 @@ function installEditingBoundary(frame) {
 
 function handleWorkingCopyClick(event) {
   if (state.mode !== "edit") return;
-  const target = event.target?.closest?.(TEXT_OBJECT_SELECTOR) || null;
+  const target = event.target?.closest?.("[data-html-editor-id]") || null;
   if (!target) return;
   event.preventDefault();
   event.stopImmediatePropagation();
-  selectTextObject(target);
+  selectObject(target);
 }
 
-function selectTextObject(element) {
+function selectObject(element) {
   clearSelection();
   state.selectedElement = element;
   state.selectedId = element.dataset.htmlEditorId;
-  state.pendingText = element.textContent;
   element.dataset.htmlEditorSelected = "true";
-  refs.textContent.value = state.pendingText;
   refs.propertiesEmpty.hidden = true;
-  refs.textProperties.hidden = false;
   refs.placeholders.hidden = true;
-  refs.selectionBadge.textContent = element.tagName.toLowerCase();
-  refs.statusPath.textContent = `${element.tagName.toLowerCase()} · ${state.selectedId}`;
+  refs.selectionActions.hidden = false;
+  const object = objectForElement(element);
+  if (!object) return;
+
+  if (object.kind === "text") {
+    state.pendingText = element.textContent;
+    refs.textContent.value = state.pendingText;
+    refs.textProperties.hidden = false;
+    refs.objectProperties.hidden = true;
+  } else {
+    refs.textProperties.hidden = true;
+    refs.objectProperties.hidden = false;
+    refs.objectSummary.querySelector("strong").textContent = objectTypeLabel(object);
+    refs.objectSummary.querySelector("span").textContent = object.statusLabel;
+    refs.objectMessage.textContent = object.message;
+  }
+  refs.selectionBadge.textContent = `${object.tag} · ${objectTypeLabel(object)}`;
+  syncSelectionSurfaces();
 }
 
 function clearSelection() {
@@ -323,18 +370,225 @@ function clearSelection() {
   }
   state.selectedElement = null;
   state.selectedId = null;
-  if (!refs) return;
   refs.propertiesEmpty.hidden = false;
   refs.textProperties.hidden = true;
+  refs.objectProperties.hidden = true;
+  refs.selectionActions.hidden = true;
   refs.placeholders.hidden = false;
   refs.selectionBadge.textContent = "未选择对象";
   refs.statusPath.textContent = "未选择对象";
+  document.querySelector(".selection-overlay")?.remove();
+  refs.hierarchyTree.querySelectorAll('[aria-selected="true"]').forEach((row) => row.setAttribute("aria-selected", "false"));
 }
 
 function previewTextChange() {
   if (!state.selectedElement) return;
   state.pendingText = refs.textContent.value;
   state.selectedElement.textContent = state.pendingText;
+  refreshObjectLabels();
+  syncSelectionSurfaces();
+}
+
+function discoverObjects(frameDocument) {
+  state.objects = [...frameDocument.querySelectorAll("[data-html-editor-id]")].map((element) => {
+    const kind = classifyObject(element);
+    const rect = element.getBoundingClientRect();
+    const stableOutline = rect.width >= 2 && rect.height >= 2;
+    const status = kind === "complex" ? (stableOutline ? "atomic" : "locked") : "editable";
+    return {
+      id: element.dataset.htmlEditorId,
+      tag: element.tagName.toLowerCase(),
+      kind,
+      status,
+      statusLabel: status === "editable" ? "可编辑" : status === "atomic" ? "整体对象" : "锁定",
+      label: objectLabel(element, kind),
+      message: status === "atomic"
+        ? "内部结构保持原样运行；当前内容只能作为整体对象选择。"
+        : status === "locked"
+          ? "当前内容无法可靠确定操作边界，已锁定并继续保留原效果。"
+          : "可从工作副本或 HTML 层级树选择。",
+      depth: objectDepth(element),
+    };
+  });
+}
+
+function objectDepth(element) {
+  let depth = 1;
+  let current = element.parentElement?.closest("[data-html-editor-id]");
+  while (current) {
+    depth += 1;
+    current = current.parentElement?.closest("[data-html-editor-id]");
+  }
+  return depth;
+}
+
+function observeWorkingCopy(frameDocument) {
+  state.observer?.disconnect();
+  let updateQueued = false;
+  state.observer = new MutationObserver(() => {
+    if (updateQueued) return;
+    updateQueued = true;
+    requestAnimationFrame(() => {
+      updateQueued = false;
+      assignLiveEditorIds(frameDocument);
+      discoverObjects(frameDocument);
+      if (state.selectedElement && !state.selectedElement.isConnected) {
+        clearSelection();
+        refs.propertiesEmpty.querySelector("h3").textContent = "对象已不在当前页面";
+        refs.propertiesEmpty.querySelector("p").textContent = "原页面状态发生变化，请从工作副本或层级树重新选择。";
+      } else {
+        const selectedObject = objectForElement(state.selectedElement);
+        if (selectedObject?.kind === "text" && document.activeElement !== refs.textContent) {
+          state.pendingText = state.selectedElement.textContent;
+          refs.textContent.value = state.pendingText;
+        }
+        refreshObjectLabels();
+        syncSelectionSurfaces();
+      }
+      renderHierarchyTree();
+    });
+  });
+  state.observer.observe(frameDocument.body, { childList: true, characterData: true, subtree: true });
+}
+
+function assignLiveEditorIds(frameDocument) {
+  const usedIds = new Set(
+    [...frameDocument.querySelectorAll("[data-html-editor-id]")]
+      .map((element) => element.dataset.htmlEditorId)
+      .filter(Boolean),
+  );
+  [...frameDocument.querySelectorAll(DISCOVERABLE_SELECTOR)].forEach((element) => {
+    if (element.dataset.htmlEditorId) return;
+    let id;
+    do {
+      id = `runtime-${state.nextObjectId++}`;
+    } while (usedIds.has(id));
+    element.dataset.htmlEditorId = id;
+    usedIds.add(id);
+  });
+}
+
+function classifyObject(element) {
+  if (element.matches(COMPLEX_OBJECT_SELECTOR)) return "complex";
+  if (element.matches(IMAGE_OBJECT_SELECTOR)) return "image";
+  if (element.matches(TEXT_OBJECT_SELECTOR)) return "text";
+  return "container";
+}
+
+function objectLabel(element, kind) {
+  if (kind === "image") return element.getAttribute("alt") || "无替代文字的图片";
+  const text = (element.textContent || "").replace(/\s+/g, " ").trim();
+  if (text) return text.slice(0, 46);
+  if (element.id) return `#${element.id}`;
+  const firstClass = typeof element.className === "string" ? element.className.trim().split(/\s+/)[0] : "";
+  return firstClass ? `.${firstClass}` : element.tagName.toLowerCase();
+}
+
+function objectTypeLabel(object) {
+  return object.kind === "text"
+    ? "文字对象"
+    : object.kind === "image"
+      ? "图片对象"
+      : object.kind === "container"
+        ? "普通容器"
+        : object.statusLabel;
+}
+
+function objectForElement(element) {
+  return state.objects.find(({ id }) => id === element.dataset.htmlEditorId);
+}
+
+function renderHierarchyTree() {
+  const query = refs.treeSearch.value.trim().toLocaleLowerCase();
+  const visibleObjects = state.objects.filter((object) => {
+    if (!query) return true;
+    return `${object.tag} ${object.label} ${object.statusLabel}`.toLocaleLowerCase().includes(query);
+  });
+
+  refs.hierarchyTree.replaceChildren(...visibleObjects.map((object) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = `tree-row tree-row-${object.status}`;
+    row.setAttribute("role", "treeitem");
+    row.setAttribute("aria-selected", String(object.id === state.selectedId));
+    row.setAttribute("aria-level", String(object.depth));
+    row.setAttribute("aria-label", `${object.label} ${object.tag} ${object.statusLabel}`);
+    row.dataset.editorId = object.id;
+    row.style.setProperty("--tree-depth", Math.min(6, object.depth - 1));
+    row.innerHTML = `
+      <span class="tree-object-icon" aria-hidden="true">${object.kind === "text" ? "T" : object.kind === "image" ? "▧" : object.kind === "container" ? "◇" : "◆"}</span>
+      <span class="tree-object-label"><strong>${escapeHtml(object.label)}</strong><small>${object.tag}</small></span>
+      <span class="tree-status">${object.statusLabel}</span>
+    `;
+    row.addEventListener("click", () => {
+      const element = document.querySelector(".working-copy-frame")?.contentDocument
+        ?.querySelector(`[data-html-editor-id="${CSS.escape(object.id)}"]`);
+      if (element) selectObject(element);
+    });
+    return row;
+  }));
+}
+
+function refreshObjectLabels() {
+  const object = objectForElement(state.selectedElement);
+  if (!object) return;
+  object.label = objectLabel(state.selectedElement, object.kind);
+  renderHierarchyTree();
+}
+
+function selectParentContainer() {
+  if (!state.selectedElement) return;
+  const parent = state.selectedElement.parentElement?.closest("[data-html-editor-id]");
+  if (parent) selectObject(parent);
+}
+
+function syncSelectionSurfaces() {
+  const element = state.selectedElement;
+  if (!element?.isConnected || state.mode !== "edit") return;
+  const object = objectForElement(element);
+  if (!object) return;
+  refs.statusPath.textContent = buildObjectPath(element);
+  renderHierarchyTree();
+  if (object.status === "locked") document.querySelector(".selection-overlay")?.remove();
+  else renderSelectionOverlay(element, object);
+  refs.selectParent.disabled = !element.parentElement?.closest("[data-html-editor-id]");
+}
+
+function buildObjectPath(element) {
+  const pieces = [];
+  let current = element;
+  while (current && current !== element.ownerDocument.body && pieces.length < 6) {
+    const id = current.id ? `#${current.id}` : "";
+    pieces.unshift(`${current.tagName.toLowerCase()}${id}`);
+    current = current.parentElement;
+  }
+  return pieces.join(" › ");
+}
+
+function renderSelectionOverlay(element, object) {
+  let overlay = document.querySelector(".selection-overlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.className = "selection-overlay";
+    overlay.setAttribute("aria-label", "当前选框");
+    refs.canvasStage.append(overlay);
+  }
+  const frame = document.querySelector(".working-copy-frame");
+  const frameRect = frame.getBoundingClientRect();
+  const elementRect = element.getBoundingClientRect();
+  const scaleX = frameRect.width / frame.offsetWidth;
+  const scaleY = frameRect.height / frame.offsetHeight;
+  overlay.style.left = `${frameRect.left - refs.canvasStage.getBoundingClientRect().left + elementRect.left * scaleX}px`;
+  overlay.style.top = `${frameRect.top - refs.canvasStage.getBoundingClientRect().top + elementRect.top * scaleY}px`;
+  overlay.style.width = `${Math.max(3, elementRect.width * scaleX)}px`;
+  overlay.style.height = `${Math.max(3, elementRect.height * scaleY)}px`;
+  overlay.textContent = `${object.tag} · ${object.statusLabel}`;
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[character]);
 }
 
 function commitTextChange() {
@@ -356,6 +610,7 @@ function commitTextChange() {
   saveProject();
   syncHistoryButtons();
   refs.documentStatus.textContent = "已保存到浏览器";
+  refreshObjectLabels();
 }
 
 function undo() {
@@ -383,7 +638,7 @@ function syncLoadedWorkingCopy() {
   const originalDocument = new DOMParser().parseFromString(state.originalHtml, "text/html");
   assignEditorIds(originalDocument);
 
-  currentDocument.querySelectorAll("[data-html-editor-id]").forEach((element) => {
+  currentDocument.querySelectorAll(TEXT_OBJECT_SELECTOR).forEach((element) => {
     const id = element.dataset.htmlEditorId;
     const originalElement = originalDocument.querySelector(
       `[data-html-editor-id="${CSS.escape(id)}"]`,
@@ -391,6 +646,8 @@ function syncLoadedWorkingCopy() {
     const text = state.edits[id]?.text ?? originalElement?.textContent;
     if (typeof text === "string") element.textContent = text;
   });
+  discoverObjects(currentDocument);
+  renderHierarchyTree();
 }
 
 async function setMode(mode) {
@@ -441,12 +698,14 @@ function restoreRecentProject() {
 }
 
 function updateProjectChrome(frame) {
-  const count = frame.contentDocument?.querySelectorAll(TEXT_OBJECT_SELECTOR).length || 0;
+  const count = state.objects.length;
   refs.documentName.textContent = state.sourceName;
   refs.documentStatus.textContent = state.restored ? "已从浏览器恢复" : "已保存到浏览器";
   refs.workingCopyTitle.textContent = state.mode === "edit" ? "编辑模式" : "预览模式";
   refs.hierarchyCount.textContent = String(count);
-  refs.hierarchyEmpty.querySelector("p").textContent = "文字对象已可从工作副本中直接选择。完整层级树将在后续切片提供。";
+  refs.hierarchyEmpty.hidden = true;
+  refs.hierarchyTree.hidden = false;
+  refs.treeSearch.disabled = false;
   refs.statusDocument.innerHTML = `<i class="status-dot status-dot-supported"></i>${state.restored ? "已从浏览器恢复" : "文档已载入"}`;
   refs.editMode.disabled = false;
   refs.previewMode.disabled = false;

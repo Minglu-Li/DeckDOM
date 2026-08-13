@@ -186,6 +186,18 @@ svg { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: 
 .hierarchy-empty { padding: 70px 27px 0; }
 .hierarchy-empty > span { color: #c0c7d3; font: 500 18px/1 "Cascadia Mono", Consolas, monospace; }
 .hierarchy-empty p { max-width: 158px; margin: 12px auto 0; font-size: 10px; line-height: 1.65; }
+.hierarchy-tree { height: calc(100% - 131px); padding: 6px 7px 24px; overflow: auto; }
+.tree-row { display: grid; width: 100%; min-height: 37px; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: 5px; padding: 5px 7px 5px calc(7px + var(--tree-depth, 0) * 9px); color: #556176; text-align: left; background: transparent; border: 0; border-radius: 4px; cursor: pointer; }
+.tree-row:hover { background: #f3f6fb; }
+.tree-row[aria-selected="true"] { color: #203c9b; background: var(--blue-soft); box-shadow: inset 2px 0 var(--blue); }
+.tree-object-icon { color: var(--blue); font: 600 9px/1 "Cascadia Mono", Consolas, monospace; text-align: center; }
+.tree-object-label { min-width: 0; }
+.tree-object-label strong, .tree-object-label small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-object-label strong { color: inherit; font-size: 9px; font-weight: 600; }
+.tree-object-label small { margin-top: 2px; color: #9aa4b4; font: 500 7px/1 "Cascadia Mono", Consolas, monospace; }
+.tree-status { padding: 2px 4px; color: #5b738a; font-size: 7px; background: #eef2f5; border-radius: 3px; white-space: nowrap; }
+.tree-row-atomic .tree-status { color: #76551b; background: var(--amber-soft); }
+.tree-row-locked .tree-status { color: #8b4c55; background: #fbeaec; }
 
 .working-copy-panel { grid-area: canvas; display: grid; min-width: 0; min-height: 0; grid-template-rows: 47px 1fr; background: var(--stage); }
 .canvas-toolbar { z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 12px; background: #f4f6fa; border-bottom: 1px solid var(--line); }
@@ -227,6 +239,8 @@ svg { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: 
   box-shadow: var(--shadow), 0 0 0 7px rgba(255, 255, 255, 0.035);
   transform: translate(-50%, -50%) scale(0.64);
 }
+.selection-overlay { position: absolute; z-index: 4; color: #fff; font: 600 8px/20px "Cascadia Mono", Consolas, monospace; border: 2px solid var(--blue); pointer-events: none; }
+.selection-overlay::before { position: absolute; top: -22px; left: -2px; height: 20px; padding: 0 6px; content: inherit; background: var(--blue); white-space: nowrap; }
 
 .upload-empty-state {
   position: absolute;
@@ -272,11 +286,18 @@ svg { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: 
 .property-placeholders { padding: 0 15px; opacity: 0.7; }
 .property-placeholders span { display: block; height: 42px; margin-bottom: 9px; background: linear-gradient(90deg, #f3f5f8 35%, #f8f9fb 35%); border: 1px solid #edf0f4; border-radius: 4px; }
 .text-properties { padding: 18px 15px; }
+.object-summary { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.object-summary strong { color: #39465a; font-size: 11px; }
+.object-summary span { padding: 3px 6px; color: #167556; font-size: 8px; background: #e5f5ef; border-radius: 10px; }
 .text-properties label { display: block; margin-bottom: 8px; color: #3a4558; font-size: 10px; font-weight: 650; }
 .text-properties textarea { width: 100%; resize: vertical; padding: 10px; color: #293449; background: #fbfcfe; border: 1px solid var(--line-strong); border-radius: 5px; font-size: 11px; line-height: 1.55; }
 .text-properties p { margin: 8px 0 13px; color: #8b95a6; font-size: 9px; line-height: 1.55; }
 .apply-text-button { width: 100%; color: #fff; background: var(--blue); border-color: var(--blue); }
 .apply-text-button:hover { color: #fff; background: var(--blue-dark); border-color: var(--blue-dark); }
+.object-properties { padding: 18px 15px; }
+.object-message { margin: 0 0 15px; color: #7b8698; font-size: 10px; line-height: 1.65; }
+.selection-actions { padding: 0 15px 18px; }
+.select-parent-button { width: 100%; }
 
 .trust-dialog {
   width: min(460px, calc(100% - 36px));
