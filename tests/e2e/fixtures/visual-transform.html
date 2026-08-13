@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>视觉变换验收</title>
+  <style>
+    body { margin: 0; font-family: sans-serif; }
+    .row { display: flex; align-items: center; gap: 32px; padding: 160px; }
+    .card { width: 180px; min-height: 100px; padding: 20px; background: #dce6ff; }
+    #target { transform: rotate(4deg); }
+    #neighbor { background: #fde8cc; }
+    .shared-copy { margin: 0; padding: 12px; background: #e9f7ee; }
+    img { width: 120px; height: 80px; object-fit: cover; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="row">
+      <article class="card" id="target"><h1>移动我</h1><p>保留原始旋转</p></article>
+      <article class="card" id="neighbor"><h2>相邻对象</h2><p>布局位置不补位</p></article>
+      <p class="shared-copy" id="copy-a">当前文字</p>
+      <p class="shared-copy" id="copy-b">同类文字</p>
+      <img id="photo" alt="缩放图片" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='80'%3E%3Crect width='120' height='80' fill='%23577bea'/%3E%3C/svg%3E">
+    </div>
+  </main>
+</body>
+</html>

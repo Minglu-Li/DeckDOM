@@ -20,14 +20,15 @@ async function importTrustedHtml(page, name) {
 }
 
 async function expectSelectionContains(page, workingCopy, target) {
-  const overlay = await page.getByLabel("当前选框").boundingBox();
-  const box = await workingCopy.locator(target).boundingBox();
-  expect(overlay).not.toBeNull();
-  expect(box).not.toBeNull();
-  expect(overlay.x).toBeLessThanOrEqual(box.x + 3);
-  expect(overlay.y).toBeLessThanOrEqual(box.y + 3);
-  expect(overlay.x + overlay.width).toBeGreaterThanOrEqual(box.x + box.width - 3);
-  expect(overlay.y + overlay.height).toBeGreaterThanOrEqual(box.y + box.height - 3);
+  await expect.poll(async () => {
+    const overlay = await page.getByLabel("当前选框").boundingBox();
+    const box = await workingCopy.locator(target).boundingBox();
+    if (!overlay || !box) return false;
+    return overlay.x <= box.x + 3
+      && overlay.y <= box.y + 3
+      && overlay.x + overlay.width >= box.x + box.width - 3
+      && overlay.y + overlay.height >= box.y + box.height - 3;
+  }).toBe(true);
 }
 
 test("user can resize and zoom a desktop reference viewport without changing document layout size", async ({ page }) => {

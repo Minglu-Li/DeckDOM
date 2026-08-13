@@ -245,8 +245,13 @@ svg { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: 
   transform: translate(-50%, -50%) scale(var(--canvas-zoom, 0.64));
   transform-origin: center;
 }
-.selection-overlay { position: absolute; z-index: 4; color: #fff; font: 600 8px/20px "Cascadia Mono", Consolas, monospace; border: 2px solid var(--blue); pointer-events: none; }
-.selection-overlay::before { position: absolute; top: -22px; left: -2px; height: 20px; padding: 0 6px; content: inherit; background: var(--blue); white-space: nowrap; }
+.selection-overlay { position: absolute; z-index: 4; color: #fff; font: 600 8px/20px "Cascadia Mono", Consolas, monospace; border: 2px solid var(--blue); cursor: move; touch-action: none; }
+.selection-overlay-label { position: absolute; top: -22px; left: -2px; height: 20px; padding: 0 6px; background: var(--blue); white-space: nowrap; pointer-events: none; }
+.scale-handle { position: absolute; width: 12px; height: 12px; padding: 0; background: #fff; border: 2px solid var(--blue); border-radius: 50%; touch-action: none; }
+.scale-handle-nw { top: -7px; left: -7px; cursor: nwse-resize; }
+.scale-handle-ne { top: -7px; right: -7px; cursor: nesw-resize; }
+.scale-handle-sw { bottom: -7px; left: -7px; cursor: nesw-resize; }
+.scale-handle-se { right: -7px; bottom: -7px; cursor: nwse-resize; }
 
 .import-diagnostic {
   position: absolute;
