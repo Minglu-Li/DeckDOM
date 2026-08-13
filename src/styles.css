@@ -207,12 +207,14 @@ svg { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: 
 .tool-state, .viewport-tools { display: flex; align-items: center; gap: 8px; }
 .tool-state button, .viewport-tools button { height: 27px; padding: 0 9px; color: #586479; font-size: 9px; background: #fff; border: 1px solid var(--line-strong); border-radius: 4px; }
 .tool-state p { display: flex; flex-direction: column; gap: 1px; margin: 0; }
-.tool-state p span, .viewport-tools label { color: #9aa3b3; font: 500 7px/1 "Cascadia Mono", Consolas, monospace; letter-spacing: 0.07em; text-transform: uppercase; }
+.tool-state p span, .viewport-label { color: #9aa3b3; font: 500 7px/1 "Cascadia Mono", Consolas, monospace; letter-spacing: 0.07em; text-transform: uppercase; }
 .tool-state p strong { color: #555f70; font-size: 9px; font-weight: 600; }
 .cursor-icon { margin-right: 5px; font-size: 12px; }
 .canvas-toolbar-rule { width: 1px; height: 20px; background: var(--line); }
 .viewport-tools output { min-width: 28px; color: #657084; font: 500 8px/1 "Cascadia Mono", Consolas, monospace; text-align: center; }
 .viewport-tools .zoom-button { width: 25px; padding: 0; font-size: 13px; }
+.viewport-dimension input { width: 45px; height: 27px; padding: 0 5px; color: #586479; font: 500 8px/1 "Cascadia Mono", Consolas, monospace; background: #fff; border: 1px solid var(--line-strong); border-radius: 4px; }
+.viewport-dimension input:focus { border-color: var(--blue); outline: 2px solid var(--blue-soft); }
 
 .canvas-stage {
   position: relative;
@@ -240,7 +242,8 @@ svg { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: 
   background: #fff;
   border: 0;
   box-shadow: var(--shadow), 0 0 0 7px rgba(255, 255, 255, 0.035);
-  transform: translate(-50%, -50%) scale(0.64);
+  transform: translate(-50%, -50%) scale(var(--canvas-zoom, 0.64));
+  transform-origin: center;
 }
 .selection-overlay { position: absolute; z-index: 4; color: #fff; font: 600 8px/20px "Cascadia Mono", Consolas, monospace; border: 2px solid var(--blue); pointer-events: none; }
 .selection-overlay::before { position: absolute; top: -22px; left: -2px; height: 20px; padding: 0 6px; content: inherit; background: var(--blue); white-space: nowrap; }
@@ -370,6 +373,7 @@ svg { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: 
 .status-path span { color: #a3abb9; text-transform: uppercase; }
 .status-path strong { color: #687386; font-weight: 500; }
 .status-items > span { display: inline-flex; align-items: center; white-space: nowrap; }
+.viewport-guarantee { color: #766024; }
 .status-dot { width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; }
 .status-dot-idle { background: #9ca6b7; }
 .status-dot-clear, .status-dot-supported { background: var(--green); }
