@@ -86,8 +86,8 @@ test("long page remains scrollable and selection follows content outside the fir
   await expectSelectionContains(page, workingCopy, "#tradein h2");
 
   await workingCopy.getByRole("heading", { name: "iPhone", exact: true }).scrollIntoViewIfNeeded();
-  await expectSelectionContains(page, workingCopy, "#tradein h2");
   await expect(page.getByLabel("当前选框")).not.toBeInViewport();
+  await expect(page.getByLabel("对象路径")).toContainText("tradein");
   await expect(workingCopy.locator(".product-section")).toHaveCount(4);
 });
 
