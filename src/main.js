@@ -722,19 +722,27 @@ function assignEditorIds(doc) {
 }
 
 function applyEdits(doc) {
+  applyContentEdits(doc);
+  Object.entries(state.edits).forEach(([id, edit]) => {
+    const element = doc.querySelector(`[data-html-editor-id="${CSS.escape(id)}"]`);
+    if (!element) return;
+    applyTextStyleEdit(element, edit.styles);
+    applyAppearanceEdit(element, edit.appearance);
+  });
+  applyVisualEditStyle(doc);
+}
+
+function applyContentEdits(doc) {
   Object.entries(state.edits).forEach(([id, edit]) => {
     const element = doc.querySelector(`[data-html-editor-id="${CSS.escape(id)}"]`);
     if (!element) return;
     if (typeof edit.html === "string") element.innerHTML = edit.html;
     else if (typeof edit.text === "string") element.textContent = edit.text;
-    applyTextStyleEdit(element, edit.styles);
-    applyAppearanceEdit(element, edit.appearance);
     if (element.matches("img") && typeof edit.imageDataUrl === "string") {
       element.setAttribute("src", edit.imageDataUrl);
       element.removeAttribute("srcset");
     }
   });
-  applyVisualEditStyle(doc);
 }
 
 function applyVisualEditStyle(doc) {
@@ -754,6 +762,34 @@ function applyVisualEditStyle(doc) {
     doc.head.append(style);
   }
   style.textContent = rules.join("\n");
+}
+
+function applyExportPatch(doc) {
+  const rules = Object.entries(state.edits).flatMap(([id, edit]) => {
+    const declaration = doc.createElement("span").style;
+    applyTextStyleEdit({ style: declaration }, edit.styles);
+    applyAppearanceEdit({ style: declaration }, edit.appearance);
+
+    const properties = [...declaration].map((property) =>
+      `${property}: ${declaration.getPropertyValue(property)} !important;`,
+    );
+    if (edit.visual) {
+      const { x = 0, y = 0, scale = 1 } = edit.visual;
+      properties.push(
+        `translate: ${x}px ${y}px !important;`,
+        `scale: ${scale} !important;`,
+        "transform-origin: center center !important;",
+      );
+    }
+    if (!properties.length) return [];
+    return [`[data-html-editor-id="${CSS.escape(id)}"] { ${properties.join(" ")} }`];
+  });
+  if (!rules.length) return;
+
+  const style = doc.createElement("style");
+  style.dataset.htmlEditorExportPatch = "true";
+  style.textContent = rules.join("\n");
+  doc.head.append(style);
 }
 
 function installEditingBoundary(frame) {
@@ -1785,7 +1821,8 @@ function syncHistoryButtons() {
 function exportHtml() {
   const doc = new DOMParser().parseFromString(state.originalHtml, "text/html");
   assignEditorIds(doc);
-  applyEdits(doc);
+  applyContentEdits(doc);
+  applyExportPatch(doc);
   const output = `<!doctype html>\n${doc.documentElement.outerHTML}`;
   const blobUrl = URL.createObjectURL(new Blob([output], { type: "text/html;charset=utf-8" }));
   const download = document.createElement("a");
