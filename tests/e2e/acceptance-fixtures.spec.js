@@ -19,7 +19,7 @@ const acceptanceFixtures = [
 
 for (const fixture of acceptanceFixtures) {
   test(`loads the original ${fixture.name} in real Chromium`, async ({ page }) => {
-    await page.goto(fixture.path);
+    await page.goto(fixture.path, { waitUntil: "domcontentloaded" });
 
     await expect(page).toHaveTitle(fixture.title);
     await expect(page.getByRole("heading", { name: fixture.visibleHeading, exact: true })).toBeVisible();
