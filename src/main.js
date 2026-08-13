@@ -248,11 +248,13 @@ const state = {
   objects: [],
   nextObjectId: 1,
   observer: null,
+  selectionAnimationFrame: null,
   resources: [],
   viewportWidth: 1440,
   viewportHeight: 900,
   canvasZoom: 0.64,
   fitCanvasActive: false,
+  visualGesture: null,
 };
 
 const refs = {
@@ -690,6 +692,26 @@ function applyEdits(doc) {
       element.removeAttribute("srcset");
     }
   });
+  applyVisualEditStyle(doc);
+}
+
+function applyVisualEditStyle(doc) {
+  let style = doc.querySelector("style[data-html-editor-visual-edits]");
+  const rules = Object.entries(state.edits).flatMap(([id, edit]) => {
+    if (!edit.visual) return [];
+    const { x = 0, y = 0, scale = 1 } = edit.visual;
+    return [`[data-html-editor-id="${CSS.escape(id)}"] { translate: ${x}px ${y}px; scale: ${scale}; transform-origin: center center; }`];
+  });
+  if (!rules.length) {
+    style?.remove();
+    return;
+  }
+  if (!style) {
+    style = doc.createElement("style");
+    style.dataset.htmlEditorVisualEdits = "true";
+    doc.head.append(style);
+  }
+  style.textContent = rules.join("\n");
 }
 
 function installEditingBoundary(frame) {
@@ -702,7 +724,7 @@ function installEditingBoundary(frame) {
     frameDocument.addEventListener("transitionend", syncSelectionSurfaces, true);
     frameDocument.addEventListener("animationend", syncSelectionSurfaces, true);
     frameDocument.addEventListener("dblclick", handleWorkingCopyDoubleClick, true);
-    frame.contentWindow.addEventListener("scroll", syncSelectionSurfaces, { passive: true });
+    frame.contentWindow.addEventListener("scroll", scheduleSelectionSync, { passive: true });
     observeWorkingCopy(frameDocument);
   } else {
     frameDocument.documentElement.dataset.htmlEditorMode = "preview";
@@ -741,6 +763,7 @@ function beginInlineTextEditing(element) {
   element.addEventListener("paste", handleInlineEditingPaste);
   element.addEventListener("blur", finishInlineTextEditing, { once: true });
   refs.inlineEditStatus.hidden = false;
+  document.querySelector(".selection-overlay")?.classList.add("is-inline-editing");
   element.focus();
 }
 
@@ -787,6 +810,7 @@ function finishInlineTextEditing() {
   state.inlineEditingElement = null;
   state.inlineEditingBeforeHtml = "";
   refs.inlineEditStatus.hidden = true;
+  document.querySelector(".selection-overlay")?.classList.remove("is-inline-editing");
   if (beforeHtml !== afterHtml) commitTextHtml(afterHtml);
 }
 
@@ -833,6 +857,7 @@ function selectObject(element) {
 
 function clearSelection() {
   if (state.inlineEditingElement) finishInlineTextEditing();
+  cancelVisualGesture();
   if (state.selectedElement?.isConnected) {
     delete state.selectedElement.dataset.htmlEditorSelected;
   }
@@ -1140,6 +1165,18 @@ function renderSelectionOverlay(element, object) {
     overlay = document.createElement("div");
     overlay.className = "selection-overlay";
     overlay.setAttribute("aria-label", "当前选框");
+    overlay.innerHTML = `
+      <span class="selection-overlay-label"></span>
+      <button type="button" class="scale-handle scale-handle-nw" data-scale-handle aria-label="左上角等比缩放手柄"></button>
+      <button type="button" class="scale-handle scale-handle-ne" data-scale-handle aria-label="右上角等比缩放手柄"></button>
+      <button type="button" class="scale-handle scale-handle-sw" data-scale-handle aria-label="左下角等比缩放手柄"></button>
+      <button type="button" class="scale-handle scale-handle-se" data-scale-handle aria-label="右下角等比缩放手柄"></button>
+    `;
+    overlay.addEventListener("pointerdown", beginVisualGesture);
+    overlay.addEventListener("pointermove", updateVisualGesture);
+    overlay.addEventListener("pointerup", finishVisualGesture);
+    overlay.addEventListener("pointercancel", cancelVisualGesture);
+    overlay.addEventListener("dblclick", handleSelectionOverlayDoubleClick);
     refs.canvasStage.append(overlay);
   }
   const frame = document.querySelector(".working-copy-frame");
@@ -1152,7 +1189,87 @@ function renderSelectionOverlay(element, object) {
   overlay.style.top = `${frameRect.top - stageRect.top + elementRect.top * scaleY}px`;
   overlay.style.width = `${Math.max(3, elementRect.width * scaleX)}px`;
   overlay.style.height = `${Math.max(3, elementRect.height * scaleY)}px`;
-  overlay.textContent = `${object.tag} · ${object.statusLabel}`;
+  overlay.querySelector(".selection-overlay-label").textContent = `${object.tag} · ${object.statusLabel}`;
+}
+
+function scheduleSelectionSync() {
+  if (state.selectionAnimationFrame != null) return;
+  state.selectionAnimationFrame = requestAnimationFrame(() => {
+    state.selectionAnimationFrame = null;
+    syncSelectionSurfaces();
+  });
+}
+
+function beginVisualGesture(event) {
+  if (event.button !== 0 || !state.selectedElement || !state.selectedId) return;
+  const object = objectForElement(state.selectedElement);
+  if (!object || object.status !== "editable" || !["text", "image", "container"].includes(object.kind)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  event.currentTarget.setPointerCapture(event.pointerId);
+  const overlayRect = event.currentTarget.getBoundingClientRect();
+  const visual = state.edits[state.selectedId]?.visual || { x: 0, y: 0, scale: 1 };
+  state.visualGesture = {
+    pointerId: event.pointerId,
+    type: event.target.closest("[data-scale-handle]") ? "scale" : "move",
+    objectId: state.selectedId,
+    before: structuredClone(state.edits),
+    startX: event.clientX,
+    startY: event.clientY,
+    centerX: overlayRect.left + overlayRect.width / 2,
+    centerY: overlayRect.top + overlayRect.height / 2,
+    startDistance: Math.max(1, Math.hypot(
+      event.clientX - (overlayRect.left + overlayRect.width / 2),
+      event.clientY - (overlayRect.top + overlayRect.height / 2),
+    )),
+    visual: { x: visual.x || 0, y: visual.y || 0, scale: visual.scale || 1 },
+  };
+}
+
+function updateVisualGesture(event) {
+  const gesture = state.visualGesture;
+  if (!gesture || event.pointerId !== gesture.pointerId) return;
+  event.preventDefault();
+  const visual = { ...gesture.visual };
+  if (gesture.type === "move") {
+    const frame = document.querySelector(".working-copy-frame");
+    const frameScale = frame.getBoundingClientRect().width / frame.offsetWidth;
+    visual.x += (event.clientX - gesture.startX) / frameScale;
+    visual.y += (event.clientY - gesture.startY) / frameScale;
+  } else {
+    const distance = Math.hypot(event.clientX - gesture.centerX, event.clientY - gesture.centerY);
+    visual.scale = Math.max(0.1, Math.min(10, gesture.visual.scale * distance / gesture.startDistance));
+  }
+  state.edits[gesture.objectId] = { ...state.edits[gesture.objectId], visual };
+  applyVisualEditStyle(state.selectedElement.ownerDocument);
+  syncSelectionSurfaces();
+}
+
+function finishVisualGesture(event) {
+  const gesture = state.visualGesture;
+  if (!gesture || event.pointerId !== gesture.pointerId) return;
+  event.currentTarget.releasePointerCapture(event.pointerId);
+  state.visualGesture = null;
+  recordEditHistory(gesture.before);
+}
+
+function handleSelectionOverlayDoubleClick(event) {
+  if (event.target.closest("[data-scale-handle]")) return;
+  const object = state.selectedElement ? objectForElement(state.selectedElement) : null;
+  if (object?.kind !== "text") return;
+  event.preventDefault();
+  event.stopPropagation();
+  beginInlineTextEditing(state.selectedElement);
+}
+
+function cancelVisualGesture(event) {
+  const gesture = state.visualGesture;
+  if (!gesture || (event?.pointerId != null && event.pointerId !== gesture.pointerId)) return;
+  state.edits = gesture.before;
+  state.visualGesture = null;
+  const doc = document.querySelector(".working-copy-frame")?.contentDocument;
+  if (doc) applyVisualEditStyle(doc);
+  syncSelectionSurfaces();
 }
 
 function escapeHtml(value) {
@@ -1328,6 +1445,7 @@ function redo() {
 }
 
 function syncLoadedWorkingCopy() {
+  const selectedId = state.selectedId;
   clearSelection();
   const currentDocument = document.querySelector(".working-copy-frame")?.contentDocument;
   if (!currentDocument) return;
@@ -1361,8 +1479,13 @@ function syncLoadedWorkingCopy() {
       element.removeAttribute("srcset");
     }
   });
+  applyVisualEditStyle(currentDocument);
   discoverObjects(currentDocument);
   renderHierarchyTree();
+  const selectedElement = selectedId
+    ? currentDocument.querySelector(`[data-html-editor-id="${CSS.escape(selectedId)}"]`)
+    : null;
+  if (selectedElement) selectObject(selectedElement);
 }
 
 async function setMode(mode) {
