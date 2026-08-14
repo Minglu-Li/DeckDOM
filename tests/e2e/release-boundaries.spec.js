@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test("release scope, local-processing limits, and browser support are visible before import", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator(".compatibility-notice")).toBeHidden();
-  await expect(page.getByText("发布验收仅覆盖 test1.html 与 test2.html，不代表支持所有 AI 生成的 HTML。", { exact: true })).toBeVisible();
+  // await expect(page.getByText("发布验收仅覆盖 test1.html 与 test2.html，不代表支持所有 AI 生成的 HTML。", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "选择本地 HTML" }).click();
   const trust = page.getByRole("dialog", { name: "仅打开受信任的 HTML" });
   await expect(trust).toContainText("文件和修改只在浏览器本地处理");

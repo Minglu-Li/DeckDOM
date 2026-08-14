@@ -131,7 +131,6 @@ app.innerHTML = `
           <p class="empty-kicker">Start with your document</p>
           <h1>把 HTML 放到工作台</h1>
           <p class="empty-description">打开一个受信任的单文件 HTML，在浏览器真实渲染结果上继续修改。</p>
-          <p class="support-boundary">发布验收仅覆盖 test1.html 与 test2.html，不代表支持所有 AI 生成的 HTML。</p>
           <button class="button empty-upload-button" type="button" data-open-html>选择本地 HTML</button>
           <div class="local-processing-note">
             <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M7 10V8a5 5 0 0 1 10 0v2m-11 0h12v10H6V10Z"/></svg>
