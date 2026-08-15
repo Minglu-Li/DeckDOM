@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>对象能力检测</title>
+</head>
+<body>
+  <main>
+    <section id="summary-card">
+      <h1>季度总结</h1>
+      <p id="live-status">初始运行状态</p>
+      <svg id="brand-art" width="180" height="80" viewBox="0 0 180 80" aria-label="品牌插图">
+        <rect width="180" height="80" rx="12" fill="#2f5bff"/>
+      </svg>
+      <canvas id="invisible-chart" style="display:none"></canvas>
+    </section>
+  </main>
+  <script>
+    setTimeout(() => {
+      document.querySelector('#live-status').textContent = '运行状态已更新';
+    }, 1200);
+  </script>
+</body>
+</html>

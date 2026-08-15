@@ -2,3 +2,8 @@ docs/
 CONTEXT.md
 prototype/
 .scratch/
+node_modules/
+dist/
+test-results/
+playwright-report/
+.npm-cache/

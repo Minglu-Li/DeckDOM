@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>对象局部外观覆盖验收</title>
+  <style>
+    body { margin: 40px; font-family: Arial, sans-serif; }
+    main { display: grid; gap: 20px; }
+    .shared-card {
+      width: 240px;
+      padding: 12px;
+      background: rgb(240, 244, 248);
+      border: 2px solid rgb(90, 100, 110);
+      border-radius: 4px;
+    }
+    .shared-copy {
+      width: 180px;
+      margin: 0;
+      padding: 8px;
+      background: rgb(250, 250, 250);
+      border: 2px solid rgb(120, 120, 120);
+      border-radius: 4px;
+    }
+    .shared-image {
+      display: block;
+      width: 80px;
+      height: 50px;
+      margin-top: 12px;
+      background: rgb(245, 245, 245);
+      border: 2px solid rgb(80, 80, 80);
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <main data-html-editor-id="cards-root">
+    <section id="primary-card" class="shared-card" data-html-editor-id="primary-card">
+      <p id="primary-copy" class="shared-copy" data-html-editor-id="primary-copy">只修改这个文字对象</p>
+      <img id="primary-image" class="shared-image" data-html-editor-id="primary-image" alt="第一张示例图" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='50'%3E%3Crect width='80' height='50' fill='%23dbeafe'/%3E%3C/svg%3E">
+    </section>
+    <section id="secondary-card" class="shared-card" data-html-editor-id="secondary-card">
+      <p id="secondary-copy" class="shared-copy" data-html-editor-id="secondary-copy">同类对象保持原样</p>
+      <img id="secondary-image" class="shared-image" data-html-editor-id="secondary-image" alt="第二张示例图" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='50'%3E%3Crect width='80' height='50' fill='%23dbeafe'/%3E%3C/svg%3E">
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,23 @@
+# 03 — 发现并层级选择可编辑对象
+
+**What to build:** 用户导入结构各异的 HTML 展示文档后，可以明确区分可编辑对象、整体对象和锁定内容，从渲染结果或 HTML 层级树选择文字对象、普通图片与普通容器，并沿原始 HTML 层级选择父容器；选框、对象路径和属性区始终与当前选择一致。
+
+**Blocked by:** 02 — 打通纯文字对象的最小完整闭环.
+
+**Status:** resolved
+
+- [x] 导入过程通过运行时能力检测识别文字对象、普通图片和普通容器，不要求输入预先包含产品专用标记。
+- [x] 每个可编辑对象获得稳定且唯一的编辑标识；重新应用修改时不依赖文字内容、CSS 选择器或易失效的 DOM 路径。
+- [x] 普通点击优先选择点击位置最小的可编辑对象，并显示准确选框、对象类型和层级路径。
+- [x] 用户可以从当前选择沿原始 HTML 层级向上选择父容器，父容器被选择时其内部内容作为整体呈现操作边界。
+- [x] HTML 层级树展示可编辑与锁定状态，支持按标签或可见文字搜索，并可用于选择难以直接点击的对象。
+- [x] SVG、Canvas、视频、iframe、图表和复杂组件不开放内部结构编辑；能稳定确定外框的内容可标为整体对象，否则明确锁定。
+- [x] 锁定内容继续保持原效果，选择失败时给出可理解状态，不把能力不足表现成导入损坏。
+- [x] 页面状态变化、对象内容变化或选择变化后，选框、对象路径、层级树和对象属性区保持同步。
+- [x] 翻页和长滚动两类验收样例均可选择常见文字、图片与普通容器，并能向上选择父容器。
+
+## Comments
+
+- Added runtime capability detection, unique editor IDs, smallest-object and parent-container selection, searchable hierarchical tree, and synchronized selection surfaces.
+- Preserved complex content while distinguishing editable, atomic and locked boundaries; locked objects never show a misleading operation box.
+- Verified both acceptance fixtures plus a focused complex-content fixture with `npm run build` and `npm run test:e2e` (8 desktop Chrome tests passed).
