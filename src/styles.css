@@ -120,6 +120,10 @@ svg { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: 
   text-decoration: none;
   border-right: 1px solid var(--line);
 }
+.brand-logo {
+  width: 29px;
+  height: 29px;
+}
 .brand-mark {
   position: relative;
   display: grid;

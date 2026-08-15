@@ -1,6 +1,24 @@
 # DeckDOM
 
-面向桌面 Chrome 和 Edge 的本地优先 HTML 展示文档编辑器。
+<p align="center">
+  <img
+    src="./assets/logo_readme.png"
+    alt="DeckDOM"
+    width="300"
+  >
+</p>
+
+<p align="center">
+  面向桌面 Chrome 和 Edge 的本地优先 HTML 可视化编辑器
+</p>
+
+<p align="center">
+  <img alt="JavaScript" src="https://img.shields.io/badge/JavaScript-ES%20Modules-F7DF1E?logo=javascript&logoColor=111">
+  <img alt="Vite" src="https://img.shields.io/badge/Vite-7.1.2-646CFF?logo=vite&logoColor=white">
+  <img alt="Playwright" src="https://img.shields.io/badge/Playwright-1.54.2-2EAD33?logo=playwright&logoColor=white">
+  <img alt="Node.js" src="https://img.shields.io/badge/Node.js-20.19%2B-5FA04E?logo=nodedotjs&logoColor=white">
+  <img alt="License" src="https://img.shields.io/badge/License-MIT-2563EB">
+</p>
 
 ## 本地开发
 

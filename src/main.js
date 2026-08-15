@@ -10,9 +10,9 @@ app.innerHTML = `
     </div>
 
     <header class="topbar" aria-label="文件与编辑工具">
-      <a class="brand" href="/" aria-label="HTML Visual Editor 首页">
-        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
-        <span><b>HTML</b><em>Visual Editor</em></span>
+      <a class="brand" href="/" aria-label="DeckDOM">
+        <img class="brand-logo" src="../assets/logo_web.png" alt="DeckDOM" aria-hidden="true">
+        <span><b>DeckDOM</b></span>
       </a>
 
       <div class="document-state" aria-label="当前文档">
@@ -272,7 +272,7 @@ app.innerHTML = `
   </div>
 `;
 
-const STORAGE_KEY = "html-visual-editor.recent-project.v1";
+const STORAGE_KEY = "DeckDOM.recent-project.v1";
 const TEXT_OBJECT_SELECTOR = "h1,h2,h3,h4,h5,h6,p,a,button,li,td,th,pre,code,blockquote";
 const IMAGE_OBJECT_SELECTOR = "img";
 const CONTAINER_OBJECT_SELECTOR = "section,article,nav,header,footer,main,aside,div,ul,ol,table,tbody,thead,tr";

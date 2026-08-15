@@ -140,7 +140,7 @@ for (const storageFailure of [
     await page.evaluate((domName) => {
       const originalSetItem = Storage.prototype.setItem;
       Storage.prototype.setItem = function setItem(key, value) {
-        if (key === "html-visual-editor.recent-project.v1") {
+        if (key === "DeckDOM.recent-project.v1") {
           throw new DOMException("storage write failed", domName);
         }
         return originalSetItem.call(this, key, value);
@@ -166,7 +166,7 @@ test("offers a clean recovery path when the recent local project is corrupted", 
   await page.goto("/");
   await page.evaluate(() => {
     localStorage.clear();
-    localStorage.setItem("html-visual-editor.recent-project.v1", "{broken-json");
+    localStorage.setItem("DeckDOM.recent-project.v1", "{broken-json");
   });
   await page.reload();
 
