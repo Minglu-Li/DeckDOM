@@ -1,4 +1,4 @@
-# HTML Visual Editor
+# DeckDOM
 
 面向桌面 Chrome 和 Edge 的本地优先 HTML 展示文档编辑器。
 
