@@ -7,3 +7,6 @@ dist/
 test-results/
 playwright-report/
 .npm-cache/
+AGENTS.md
+CONTEXT.md
+
