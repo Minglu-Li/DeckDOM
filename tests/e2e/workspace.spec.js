@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test("opens the empty editor workspace in supported desktop Chromium", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page).toHaveTitle("HTML Visual Editor");
+  await expect(page).toHaveTitle("DeckDOM");
   await expect(page.getByRole("banner", { name: "文件与编辑工具" })).toBeVisible();
   await expect(page.getByRole("complementary", { name: "HTML 层级" })).toBeVisible();
   await expect(page.getByRole("main", { name: "尚未载入" })).toBeVisible();
