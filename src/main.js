@@ -2,6 +2,8 @@ import "./styles.css";
 
 const app = document.querySelector("#app");
 
+import logoUrl from "../assets/logo_web.png";
+
 app.innerHTML = `
   <div class="editor-workspace">
     <div class="compatibility-notice" role="status" hidden>
@@ -10,8 +12,8 @@ app.innerHTML = `
     </div>
 
     <header class="topbar" aria-label="文件与编辑工具">
-      <a class="brand" href="/" aria-label="DeckDOM">
-        <img class="brand-logo" src="../assets/logo_web.png" alt="DeckDOM" aria-hidden="true">
+      <a class="brand" href="${import.meta.env.BASE_URL}" aria-label="DeckDOM">
+        <img class="brand-logo" src="${logoUrl}" alt="DeckDOM" aria-hidden="true">
         <span><b>DeckDOM</b></span>
       </a>
 
